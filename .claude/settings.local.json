@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(ls -la \"d:\\\\Coder\\\\game_franco\\\\js\"\" && echo \"=== Entities ===\" && ls -la \"d:Codergame_francojsentities\"\")",
+      "Bash(node --check:*)"
+    ]
+  }
+}

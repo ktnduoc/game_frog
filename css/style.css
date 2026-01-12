@@ -1,0 +1,374 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    font-family: 'Dancing Script', cursive;
+    overflow: hidden;
+}
+
+.game-container {
+    text-align: center;
+    width: 100%;
+    max-width: 800px;
+    padding: 10px;
+    position: relative;
+}
+
+h1 {
+    color: #4ade80;
+    margin-bottom: 10px;
+    text-shadow:
+        3px 3px 0px #2d5016,
+        4px 4px 8px rgba(0, 0, 0, 0.5);
+    font-size: clamp(24px, 5vw, 38px);
+    font-family: 'Baloo 2', cursive;
+    font-weight: 700;
+    letter-spacing: 2px;
+}
+
+/* Top Controls Row */
+.top-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    gap: 20px;
+}
+
+.instructions {
+    color: #fff;
+    margin: 0;
+     margin-left: 78px;
+    font-size: clamp(10px, 2.5vw, 14px);
+    flex: 1;
+}
+
+.instructions span {
+    color: #ffd700;
+    font-weight: bold;
+}
+
+.toggle-guide-btn {
+    background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+    border: 2px solid #16a34a;
+    border-radius: 8px;
+    color: #fff;
+    cursor: pointer;
+    font-size: 20px;
+    padding: 8px 16px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    flex-shrink: 0;
+}
+
+.toggle-guide-btn:hover {
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+}
+
+.toggle-guide-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+canvas {
+    border: 3px solid #4ade80;
+    border-radius: 10px;
+    box-shadow: 0 0 30px rgba(74, 222, 128, 0.3);
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+    cursor: crosshair;
+}
+
+.score-board {
+    position: absolute;
+    right: -180px;
+    top: 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    color: #fff;
+    font-size: 16px;
+    width: 160px;
+}
+
+.score-board div {
+    background: rgba(0, 0, 0, 0.7);
+    padding: 10px 15px;
+    border-radius: 8px;
+    border: 2px solid #4ade80;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.score-board span {
+    color: #4ade80;
+    font-weight: bold;
+    display: block;
+    margin-top: 5px;
+    font-size: 18px;
+}
+
+/* Close Guide Button */
+.close-guide-btn {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    width: 40px;
+    height: 40px;
+    background: rgba(255, 0, 0, 0.7);
+    border: 2px solid #8B0000;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 20px;
+    cursor: pointer;
+    z-index: 10;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.close-guide-btn:hover {
+    background: rgba(255, 0, 0, 0.9);
+    transform: rotate(90deg);
+}
+
+/* Game Guide Section */
+.game-guide {
+    margin-top: 30px;
+    padding: 25px;
+    background: linear-gradient(135deg, #1a4d2e 0%, #22543d 50%, #1a4d2e 100%);
+    border-radius: 15px;
+    box-shadow:
+        0 8px 20px rgba(0, 0, 0, 0.5),
+        inset 0 2px 5px rgba(74, 222, 128, 0.2),
+        inset 0 -2px 5px rgba(0, 0, 0, 0.4);
+    border: 3px solid #4ade80;
+    position: relative;
+    overflow: hidden;
+    max-height: 500px;
+}
+
+.game-guide::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background:
+        repeating-linear-gradient(90deg,
+            transparent,
+            transparent 10px,
+            rgba(74, 222, 128, 0.1) 10px,
+            rgba(74, 222, 128, 0.1) 11px),
+        repeating-linear-gradient(0deg,
+            transparent,
+            transparent 50px,
+            rgba(74, 222, 128, 0.05) 50px,
+            rgba(74, 222, 128, 0.05) 52px);
+    pointer-events: none;
+    opacity: 0.4;
+}
+
+.game-guide h2 {
+    color: #4ade80;
+    font-family: 'Baloo 2', cursive;
+    font-weight: 700;
+    font-size: clamp(20px, 4vw, 28px);
+    margin-bottom: 20px;
+    text-shadow:
+        2px 2px 0px #1a4d2e,
+        3px 3px 6px rgba(0, 0, 0, 0.8);
+    position: relative;
+    z-index: 1;
+    letter-spacing: 1px;
+}
+
+.guide-content {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 15px;
+    text-align: left;
+    position: relative;
+    z-index: 1;
+    max-height: 400px;
+    overflow-y: auto;
+    padding-right: 10px;
+}
+
+/* Custom scrollbar for guide content */
+.guide-content::-webkit-scrollbar {
+    width: 10px;
+}
+
+.guide-content::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 5px;
+}
+
+.guide-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 215, 0, 0.6);
+    border-radius: 5px;
+}
+
+.guide-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 215, 0, 0.8);
+}
+
+.guide-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px;
+    background: rgba(74, 222, 128, 0.1);
+    border-radius: 8px;
+    border: 1px solid rgba(74, 222, 128, 0.3);
+    transition: all 0.3s ease;
+}
+
+.guide-item:hover {
+    background: rgba(74, 222, 128, 0.2);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(74, 222, 128, 0.3);
+}
+
+.guide-icon {
+    font-size: 24px;
+    flex-shrink: 0;
+    color: #4ade80;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+}
+
+.guide-item div {
+    color: #e0f2e9;
+    font-family: 'Dancing Script', cursive;
+    font-weight: 600;
+    font-size: clamp(14px, 2.5vw, 16px);
+    line-height: 1.8;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+}
+
+.guide-item strong {
+    color: #FFD700;
+    font-weight: 700;
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+    body {
+        align-items: flex-start;
+        padding-top: 10px;
+    }
+
+    .game-container {
+        padding: 5px;
+    }
+
+    h1 {
+        margin-bottom: 0px;
+    }
+
+    .top-controls {
+        flex-direction: column;
+        gap: 10px;
+        align-items: stretch;
+    }
+
+    .instructions {
+        margin-left: 20px;
+        margin: 0;
+        text-align: center;
+    }
+
+    .toggle-guide-btn {
+        display: none;
+    }
+
+    .game-guide {
+        display: block !important;
+        margin-top: 20px;
+        padding: 15px;
+    }
+
+    canvas {
+        border-width: 2px;
+    }
+
+    .score-board {
+        position: static;
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        margin-top: 10px;
+        gap: 10px;
+        width: 100%;
+    }
+
+    .score-board div {
+        flex: 1;
+        min-width: 120px;
+    }
+
+    .score-board span {
+        display: inline;
+        margin-top: 0;
+        margin-left: 5px;
+        font-size: 16px;
+    }
+
+    .guide-content {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+}
+
+@media (max-width: 480px) {
+    .game-container {
+        padding: 2px;
+    }
+
+    canvas {
+        border-radius: 5px;
+    }
+}
+
+/* Developer Mode Button */
+.dev-mode-btn {
+    background: linear-gradient(135deg, #6b7280, #4b5563);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.dev-mode-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.dev-mode-btn:active {
+    transform: translateY(0);
+}
+
+.dev-mode-btn i {
+    margin-right: 8px;
+}

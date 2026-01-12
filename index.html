@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Ếch ngồi đáy giếng - mtt dev</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700&family=Dancing+Script:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="game-container">
+        <h1>ẾCH NGỒI ĐÁY GIẾNG</h1>
+        <div class="top-controls">
+            <div class="instructions">
+                Di chuyen chuot de ngam | <span>CLICK CHUOT</span> hoac <span>SPACE</span> de le luoi bat moi
+            </div>
+            <button id="toggleGuideBtn" class="toggle-guide-btn">
+                <i class="fas fa-book-open"></i>
+            </button>
+        </div>
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div class="score-board">
+            <div>Điểm: <span id="score">0</span></div>
+            <div>Liên tục: <span id="combo">0</span></div>
+            <div>Chiều cao lá sen: <span id="level">0</span></div>
+            <div>Tiếp theo: <span id="next-level">0/100</span></div>
+        </div>
+        
+        <div class="game-guide" id="gameGuide" style="display: none;">
+            <button class="close-guide-btn" id="closeGuideBtn">
+                <i class="fas fa-times"></i>
+            </button>
+            <h2><i class="fas fa-gamepad"></i> Hướng Dẫn Chơi</h2>
+            <div class="guide-content">
+                <div class="guide-item">
+                    <span class="guide-icon"><i class="fas fa-computer-mouse"></i></span>
+                    <div>
+                        <strong>PC:</strong> Di chuyển chuột để ngắm, Click/Space để lè lưỡi bắt con mồi<br>
+                        <strong>Mobile:</strong> Click hoặc kéo <strong>côn trùng</strong> trong phạm vi để ăn <br>
+                        Ăn côn trùng để ghi điểm và tăng chiều cao lá sen để thoát ra ngoài giếng nhé!
+                    </div>
+                </div>
+                <div class="guide-item">
+                    <span class="guide-icon"><i class="fas fa-bug"></i></span>
+                    <div>
+                        Bắt <strong>côn trùng</strong> để ghi điểm (mỗi loại có điểm khác nhau), <strong>côn trùng</strong> sẽ hút mật <strong>hoa</strong> làm hoa <strong>tàn nhanh</strong>, bạn cần duy trì hoa sen <strong>nở</strong> để thu hút <strong>côn trùng</strong>.
+                        <br><strong>Lưu ý:</strong> Khi không còn hoa sen nào sẽ không có côn trùng điểm cao để ăn.
+                    </div>
+                </div>
+                 <div class="guide-item">
+                    <span class="guide-icon"><i class="fas fa-worm"></i></span>
+                    <div>
+                        Sẽ có các con<strong> sâu</strong> phá hoại lá sen làm giảm tải trọng của lá sen, cần chú ý!! <br>
+                        Mỗi con <strong>sâu</strong> cố định 5 điểm và sẽ tăng khi nó ăn được lá sen.
+                    </div>
+                </div>
+                <div class="guide-item">
+                    <span class="guide-icon"><i class="fas fa-fish"></i></span>
+                    <div>
+                        <strong>Cá</strong> tăng 200 cân, không có điểm. <br>
+                        <strong>Ngoài ra: </strong> sau level 7 sẽ có <strong>bọ cánh cứng</strong> 🐞 sẽ bò lên đến 1 vị trí cố định làm chiếm 200 cân tải trọng của lá sen, cần đuổi nó đi để tránh vượt quá tải trọng.
+                    </div>
+                </div>
+                <div class="guide-item">
+                    <span class="guide-icon"><i class="fas fa-skull-crossbones"></i></span>
+                    <div>
+                        <strong>Đom đóm</strong> có độc! Ăn 1 côn trùng bất kỳ để giải độc
+                    </div>
+                </div>
+                <div class="guide-item">
+                    <span class="guide-icon"><i class="fas fa-droplet"></i></span>
+                    <div>
+                        <strong>Nước thánh xanh:</strong> Phục hồi hoa sen & tăng tốc độ nở hoa, xanh lá (chỉ có tối đa 10 lọ xanh lá trong 1 lần chơi) phục hồi tải trọng lá sen của ếch
+                    </div>
+                </div>
+                <div class="guide-item">
+                    <span class="guide-icon"><i class="fas fa-flask"></i></span>
+                    <div>
+                        <strong>Nước thánh cam:</strong> Tăng tốc độ tiêu hóa, tăng gấp đôi điểm số trong 10s.
+                    </div>
+                </div>
+                <div class="guide-item">
+                    <span class="guide-icon"><i class="fas fa-weight-scale"></i></span>
+                    <div>
+                        Tải trọng tối đa <strong>500 cân</strong> (cả lá sen), đừng để quá tải!
+                    </div>
+                </div>
+                <div class="guide-item">
+                    <span class="guide-icon"><i class="fas fa-chart-line"></i></span>
+                    <div>
+                        Mỗi level cần số điểm khác nhau, lưỡi dài hơn khi lên level
+                    </div>
+                </div>
+                <div class="guide-item">
+                    <span class="guide-icon"><i class="fas fa-glasses"></i></span>
+                    <div>
+                        Nút bên trái: <strong>Thay đổi kính</strong> (None/Clear/Dark/Rainbow)
+                    </div>
+                </div>
+                <div class="guide-item">
+                    <span class="guide-icon"><i class="fas fa-pause"></i></span>
+                    <div>
+                        Nút giữa: <strong>Tạm dừng/Tiếp tục</strong> trò chơi
+                    </div>
+                </div>
+                <div class="guide-item">
+                    <span class="guide-icon"><i class="fas fa-volume-high"></i></span>
+                    <div>
+                        Nút bên phải: <strong>Bật/tắt nhạc</strong> nền
+                    </div>
+                </div>
+                <div class="guide-item" id="devModeSection" style="margin-top: 20px; padding-top: 20px; border-top: 2px solid rgba(74, 222, 128, 0.3); display: none;">
+                    <span class="guide-icon"><i class="fas fa-code"></i></span>
+                    <div>
+                        <button id="devModeBtn" class="dev-mode-btn">
+                            <i class="fas fa-flask"></i> Developer Mode: <span id="devModeStatus">OFF</span>
+                        </button>
+                        <div style="font-size: 12px; color: #888; margin-top: 5px;">
+                            (Test nhanh các tính năng - Điểm lên level giảm 80%)
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="js/main.js"></script>
+    <script type="module">
+        import { toggleDevMode, isDevMode } from './js/state.js';
+        
+        // Toggle guide display
+        const toggleGuideBtn = document.getElementById('toggleGuideBtn');
+        const closeGuideBtn = document.getElementById('closeGuideBtn');
+        const gameGuide = document.getElementById('gameGuide');
+        const gameCanvas = document.getElementById('gameCanvas');
+        const devModeBtn = document.getElementById('devModeBtn');
+        const devModeStatus = document.getElementById('devModeStatus');
+        const devModeSection = document.getElementById('devModeSection');
+        
+        // Secret code: Press space 3 times quickly to reveal developer mode (only when guide is open)
+        let spaceCount = 0;
+        let spaceTimer = null;
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                // Only count space presses if the game guide is open (to avoid conflict with prey catching)
+                const isGuideOpen = gameGuide.style.display === 'block';
+                
+                if (isGuideOpen) {
+                    spaceCount++;
+                    
+                    // Clear previous timer
+                    if (spaceTimer) clearTimeout(spaceTimer);
+                    
+                    // Reset counter after 1 second
+                    spaceTimer = setTimeout(() => {
+                        spaceCount = 0;
+                    }, 1000);
+                    
+                    // Reveal developer mode after 3 space presses
+                    if (spaceCount >= 3) {
+                        devModeSection.style.display = 'flex';
+                        spaceCount = 0;
+                        
+                        // Show notification
+                        const notification = document.createElement('div');
+                        notification.style.cssText = `
+                            position: fixed;
+                            top: 50%;
+                            left: 50%;
+                            transform: translate(-50%, -50%);
+                            background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+                            color: white;
+                            padding: 20px 40px;
+                            border-radius: 10px;
+                            font-size: 16px;
+                            font-weight: bold;
+                            z-index: 10000;
+                            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+                        `;
+                        notification.textContent = '🔓 Developer Mode Unlocked!';
+                        document.body.appendChild(notification);
+                        setTimeout(() => notification.remove(), 2000);
+                    }
+                }
+            }
+        });
+        
+        // Update dev mode status on load
+        devModeStatus.textContent = isDevMode() ? 'ON' : 'OFF';
+        devModeBtn.style.background = isDevMode() ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #6b7280, #4b5563)';
+        
+        // Developer Mode toggle
+        devModeBtn.addEventListener('click', () => {
+            const newMode = toggleDevMode();
+            devModeStatus.textContent = newMode ? 'ON' : 'OFF';
+            devModeBtn.style.background = newMode ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #6b7280, #4b5563)';
+            
+            // Show notification
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: ${newMode ? '#f59e0b' : '#6b7280'};
+                color: white;
+                padding: 20px 40px;
+                border-radius: 10px;
+                font-size: 18px;
+                font-weight: bold;
+                z-index: 10000;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            `;
+            notification.textContent = newMode ? 'Developer Mode: ON (Reload to apply)' : 'Developer Mode: OFF (Reload to apply)';
+            document.body.appendChild(notification);
+            setTimeout(() => notification.remove(), 2000);
+        });
+        
+        toggleGuideBtn.addEventListener('click', () => {
+            if (gameGuide.style.display === 'none' || !gameGuide.style.display) {
+                gameGuide.style.display = 'block';
+                gameGuide.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } else {
+                gameGuide.style.display = 'none';
+                gameCanvas.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        });
+        
+        closeGuideBtn.addEventListener('click', () => {
+            gameGuide.style.display = 'none';
+            gameCanvas.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+    </script>
+</body>
+</html>
