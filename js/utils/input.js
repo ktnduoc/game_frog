@@ -100,7 +100,9 @@ export function initInput(canvasElement) {
     const longPressDelay = 150; // ms to activate joystick (reduced for faster response)
 
     document.addEventListener('touchstart', (e) => {
-        e.preventDefault();
+        if (e.cancelable) {
+            e.preventDefault();
+        }
         const pos = getCanvasPosition(e, canvasElement);
         touchStartTime = Date.now();
         
@@ -114,7 +116,9 @@ export function initInput(canvasElement) {
     }, { passive: false });
 
     document.addEventListener('touchmove', (e) => {
-        e.preventDefault();
+        if (e.cancelable) {
+            e.preventDefault();
+        }
         const pos = getCanvasPosition(e, canvasElement);
         
         // Check if long press (activate joystick)
@@ -122,21 +126,28 @@ export function initInput(canvasElement) {
         if (holdTime > longPressDelay) {
             joystickState.active = true;
             
-            // Calculate direction from frog position to touch
-            const frogX = canvasElement.width / 2; // Approximate frog position
-            const frogY = canvasElement.height - 80;
+            // Get joystick position on screen (center bottom)
+            const joystickScreenX = window.innerWidth / 2;
+            const joystickScreenY = window.innerHeight - 52 - 80; // bottom 52px + half of joystick height (160/2)
             
-            const dx = pos.x - frogX;
-            const dy = pos.y - frogY;
+            // Get touch position on screen
+            const touchScreenX = e.touches[0].clientX;
+            const touchScreenY = e.touches[0].clientY;
+            
+            // Calculate direction from joystick center to touch position
+            const dx = touchScreenX - joystickScreenX;
+            const dy = touchScreenY - joystickScreenY;
             const distance = Math.sqrt(dx * dx + dy * dy);
             
             if (distance > 5) {
-                // Normalize and scale for joystick visual
-                const normalized = Math.min(distance, 300) / 300;
-                joystickState.currentX = (dx / distance) * normalized * joystickState.maxRadius;
-                joystickState.currentY = (dy / distance) * normalized * joystickState.maxRadius;
+                // Clamp stick within max radius for visual
+                const stickDistance = Math.min(distance, joystickState.maxRadius);
+                joystickState.currentX = (dx / distance) * stickDistance;
+                joystickState.currentY = (dy / distance) * stickDistance;
                 
-                // Set game mouse position far in the direction
+                // Calculate game target position based on direction
+                const frogX = canvasElement.width / 2;
+                const frogY = canvasElement.height - 80;
                 const targetDistance = 500;
                 gameState.mouseX = frogX + (dx / distance) * targetDistance;
                 gameState.mouseY = frogY + (dy / distance) * targetDistance;
@@ -210,7 +221,9 @@ export function initInput(canvasElement) {
     // Touch tap to shoot or eat caterpillar - Listen on document to capture touches anywhere on screen
     document.addEventListener('touchend', (e) => {
         if (gameState.state === 'playing') {
-            e.preventDefault();
+            if (e.cancelable) {
+                e.preventDefault();
+            }
             
             // Deactivate joystick
             joystickState.active = false;
