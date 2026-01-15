@@ -1746,6 +1746,7 @@ function gameLoop() {
     if (gameState.state === 'victory') {
         updateFrog(); // Continue frog dancing animation
         updateFireworks();
+        updateJoystick(); // Update joystick fade effect
         
         // Spawn fireworks periodically
         if (Math.random() < 0.1) {
@@ -1762,6 +1763,12 @@ function gameLoop() {
     // Draw game over screen
     if (gameState.state === 'gameover') {
         drawGameOver();
+        updateJoystick(); // Update joystick fade effect even in game over
+    }
+    
+    // Update joystick in intro and paused states too
+    if (gameState.state === 'intro' || gameState.state === 'paused') {
+        updateJoystick();
     }
 
     // Only spawn during gameplay

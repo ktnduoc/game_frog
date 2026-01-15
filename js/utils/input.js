@@ -8,72 +8,56 @@ import { playEatSound } from '../audio/audio.js';
 let onShootCallback = null;
 let lastTouchPos = { x: 0, y: 0 };
 
+// Virtual joystick DOM elements
+let joystickElement = null;
+let joystickStick = null;
+
 // Virtual joystick state
 const joystickState = {
     active: false,
-    baseX: 0,
-    baseY: 0,
-    stickX: 0,
-    stickY: 0,
-    maxRadius: 80,
-    stickRadius: 30,
-    opacity: 0,
-    fadeSpeed: 0.1
+    maxRadius: 70, // Max distance stick can move from center
+    centerX: 80, // Center of joystick base (relative to base element)
+    centerY: 80,
+    currentX: 0, // Current stick offset
+    currentY: 0
 };
 
 export function setShootCallback(callback) {
     onShootCallback = callback;
 }
 
-// Draw virtual joystick
-export function drawJoystick(ctx) {
-    if (joystickState.opacity <= 0) return;
-
-    ctx.save();
-    ctx.globalAlpha = joystickState.opacity;
-
-    // Draw base circle
-    ctx.beginPath();
-    ctx.arc(joystickState.baseX, joystickState.baseY, joystickState.maxRadius, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-
-    // Draw center dot
-    ctx.beginPath();
-    ctx.arc(joystickState.baseX, joystickState.baseY, 5, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.fill();
-
-    // Draw stick
-    ctx.beginPath();
-    ctx.arc(joystickState.stickX, joystickState.stickY, joystickState.stickRadius, 0, Math.PI * 2);
-    const gradient = ctx.createRadialGradient(
-        joystickState.stickX, joystickState.stickY, 0,
-        joystickState.stickX, joystickState.stickY, joystickState.stickRadius
-    );
-    gradient.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
-    gradient.addColorStop(1, 'rgba(255, 255, 255, 0.4)');
-    ctx.fillStyle = gradient;
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-
-    ctx.restore();
+// Initialize joystick DOM references
+function initJoystickElements() {
+    if (!joystickElement) {
+        joystickElement = document.getElementById('virtualJoystick');
+        joystickStick = joystickElement?.querySelector('.joystick-stick');
+    }
 }
 
-// Update joystick opacity
-export function updateJoystick() {
+// Update joystick visual position
+function updateJoystickVisual() {
+    if (!joystickStick) return;
+    
     if (joystickState.active) {
-        // Fade in
-        joystickState.opacity = Math.min(1, joystickState.opacity + joystickState.fadeSpeed);
+        joystickElement.classList.add('active');
+        // Update stick position
+        const translateX = joystickState.currentX;
+        const translateY = joystickState.currentY;
+        joystickStick.style.transform = `translate(calc(-50% + ${translateX}px), calc(-50% + ${translateY}px))`;
     } else {
-        // Fade out
-        joystickState.opacity = Math.max(0, joystickState.opacity - joystickState.fadeSpeed);
+        joystickElement.classList.remove('active');
+        // Reset to center
+        joystickStick.style.transform = 'translate(-50%, -50%)';
     }
+}
+
+// No longer need these exports as joystick is HTML-based
+export function drawJoystick(ctx) {
+    // Not used anymore - joystick is now HTML element
+}
+
+export function updateJoystick() {
+    updateJoystickVisual();
 }
 
 function getCanvasPosition(e, canvasElement) {
@@ -101,6 +85,9 @@ function getCanvasPosition(e, canvasElement) {
 }
 
 export function initInput(canvasElement) {
+    // Initialize joystick DOM elements
+    initJoystickElements();
+    
     // Mouse tracking
     canvasElement.addEventListener('mousemove', (e) => {
         const pos = getCanvasPosition(e, canvasElement);
@@ -110,18 +97,16 @@ export function initInput(canvasElement) {
 
     // Touch tracking - Listen on document to capture touches anywhere on screen
     let touchStartTime = 0;
-    const longPressDelay = 200; // ms to activate joystick
+    const longPressDelay = 150; // ms to activate joystick (reduced for faster response)
 
     document.addEventListener('touchstart', (e) => {
         e.preventDefault();
         const pos = getCanvasPosition(e, canvasElement);
         touchStartTime = Date.now();
         
-        // Initialize joystick at touch position
-        joystickState.baseX = pos.x;
-        joystickState.baseY = pos.y;
-        joystickState.stickX = pos.x;
-        joystickState.stickY = pos.y;
+        // Reset joystick stick to center
+        joystickState.currentX = 0;
+        joystickState.currentY = 0;
         
         gameState.mouseX = pos.x;
         gameState.mouseY = pos.y;
@@ -137,31 +122,24 @@ export function initInput(canvasElement) {
         if (holdTime > longPressDelay) {
             joystickState.active = true;
             
-            // Calculate stick position relative to base
-            const dx = pos.x - joystickState.baseX;
-            const dy = pos.y - joystickState.baseY;
+            // Calculate direction from frog position to touch
+            const frogX = canvasElement.width / 2; // Approximate frog position
+            const frogY = canvasElement.height - 80;
+            
+            const dx = pos.x - frogX;
+            const dy = pos.y - frogY;
             const distance = Math.sqrt(dx * dx + dy * dy);
             
-            // Clamp stick within max radius
-            if (distance > joystickState.maxRadius) {
-                const angle = Math.atan2(dy, dx);
-                joystickState.stickX = joystickState.baseX + Math.cos(angle) * joystickState.maxRadius;
-                joystickState.stickY = joystickState.baseY + Math.sin(angle) * joystickState.maxRadius;
-            } else {
-                joystickState.stickX = pos.x;
-                joystickState.stickY = pos.y;
-            }
-            
-            // Calculate target position based on joystick direction
-            const stickDx = joystickState.stickX - joystickState.baseX;
-            const stickDy = joystickState.stickY - joystickState.baseY;
-            const stickDistance = Math.sqrt(stickDx * stickDx + stickDy * stickDy);
-            
-            if (stickDistance > 5) {
-                // Calculate target position far from frog in the stick direction
-                const targetDistance = 500; // Distance from base to target
-                gameState.mouseX = joystickState.baseX + (stickDx / stickDistance) * targetDistance;
-                gameState.mouseY = joystickState.baseY + (stickDy / stickDistance) * targetDistance;
+            if (distance > 5) {
+                // Normalize and scale for joystick visual
+                const normalized = Math.min(distance, 300) / 300;
+                joystickState.currentX = (dx / distance) * normalized * joystickState.maxRadius;
+                joystickState.currentY = (dy / distance) * normalized * joystickState.maxRadius;
+                
+                // Set game mouse position far in the direction
+                const targetDistance = 500;
+                gameState.mouseX = frogX + (dx / distance) * targetDistance;
+                gameState.mouseY = frogY + (dy / distance) * targetDistance;
             }
         } else {
             // Normal touch move
