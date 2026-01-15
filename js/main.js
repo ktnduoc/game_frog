@@ -2,7 +2,7 @@
 import { FISH_SPAWN_INTERVAL, RIBBIT_INTERVAL } from './config.js';
 import { gameState, frogState, frogEvolution, timers, updateDigestion, dayNightState, updateDayNight } from './state.js';
 import { initCanvas, ctx, canvas, clearCanvas } from './utils/canvas.js';
-import { initInput, setShootCallback } from './utils/input.js';
+import { initInput, setShootCallback, drawJoystick, updateJoystick } from './utils/input.js';
 import { initAudio, getAudioContext, playRibbitSound, loadBackgroundMusic, playBackgroundMusic, pauseBackgroundMusic, toggleMute, isMusicMuted, playFallInWaterSound } from './audio/audio.js';
 
 // Victory fireworks
@@ -1685,6 +1685,9 @@ function gameLoop() {
     drawPauseButton();
     drawMuteButton();
     
+    // Draw joystick (always on top)
+    drawJoystick(ctx);
+    
     // Draw intro screen
     if (gameState.state === 'intro') {
         drawIntroScreen();
@@ -1718,6 +1721,7 @@ function gameLoop() {
         updateLilyPadFlash();
         updateDigestion();
         updateFalling();
+        updateJoystick(); // Update joystick fade effect
 
         // Check victory condition - if lily pad reaches finish line
         const finishLineY = getFinishLineY();
@@ -1735,6 +1739,7 @@ function gameLoop() {
         // During jumping animation, only update frog and water
         updateFrog();
         updateWaterDroplets();
+        updateJoystick(); // Update joystick fade effect
     }
     
     // Update victory animations
