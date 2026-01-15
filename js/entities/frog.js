@@ -5,6 +5,8 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../config.js';
 import { frogLilyPad } from '../environment/lilypad.js';
 import { createSplash, waterDroplets } from '../environment/water.js';
 import { playWaterSplashSound } from '../audio/audio.js';
+import { hook } from './hook.js';
+import { fishingRod } from '../environment/background.js';
 
 // Frog (player) - sits on lily pad
 export const frog = {
@@ -30,6 +32,38 @@ export const frog = {
 
 // Update Frog position (follows lily pad wave motion)
 export function updateFrog() {
+    // Update hunger timer FIRST (continues even when caught by fishing rod)
+    if (gameState.state === 'playing' && !frogState.isDead) {
+        frogState.hungerTimer++;
+        
+        // Start starving warning at 80% (24 seconds)
+        if (frogState.hungerTimer > frogState.hungerDuration * 0.8) {
+            frogState.isStarving = true;
+        }
+        
+        // Die from starvation
+        if (frogState.hungerTimer >= frogState.hungerDuration) {
+            frogState.isDead = true;
+            gameState.state = 'gameover';
+        }
+    }
+    
+    // If caught by fishing rod, pull frog up
+    if (hook.hookedByFishingRod && fishingRod.isCaught) {
+        // Frog follows the bait position (being pulled up)
+        const baitX = fishingRod.getBaitX();
+        const baitY = fishingRod.getBaitY();
+        
+        // Keep frog below bait and below well mouth (Y=300 is lower position)
+        frog.x = baitX;
+        frog.y = Math.max(baitY - 30, 250); // Keep frog lower in the well
+        
+        // Add slower struggling motion
+        const struggleTime = Date.now() * 0.003; // Much slower
+        frog.tilt = Math.sin(struggleTime) * 0.3 + Math.cos(struggleTime * 1.5) * 0.2;
+        return; // Don't do normal updates
+    }
+    
     // Skip update if falling
     if (frogState.isFalling) return;
 
@@ -245,26 +279,20 @@ export function updateFrog() {
     if (frogState.isPoisoned) {
         frogState.poisonTimer--;
         if (frogState.poisonTimer <= 0) {
-            // Die from poison
-            frogState.isDead = true;
-            frogState.isPoisoned = false;
-            gameState.state = 'gameover';
-        }
-    }
-
-    // Update hunger timer (only during playing)
-    if (gameState.state === 'playing' && !frogState.isDead) {
-        frogState.hungerTimer++;
-        
-        // Start starving warning at 80% (24 seconds)
-        if (frogState.hungerTimer > frogState.hungerDuration * 0.8) {
-            frogState.isStarving = true;
-        }
-        
-        // Die from starvation
-        if (frogState.hungerTimer >= frogState.hungerDuration) {
-            frogState.isDead = true;
-            gameState.state = 'gameover';
+            // Check if we have antidote to save the frog
+            if (frogState.antidoteCount > 0) {
+                // Import and use antidote function
+                import('./antidotepotion.js').then(module => {
+                    module.useAntidote();
+                });
+            } else {
+                // Die from poison - no antidote available
+                frogState.isDead = true;
+                frogState.isPoisoned = false;
+                gameState.deathReason = 'poison';
+                gameState.gameOverTimer = 0;
+                gameState.state = 'gameover';
+            }
         }
     }
 }
@@ -274,7 +302,15 @@ export function drawFrog(hookState) {
     ctx.save();
 
     // Calculate scale based on weight (1.0 to 1.8 max - 80% bigger)
-    const weightScale = 1 + (frogState.weight / frogState.maxWeight) * 0.8;
+    // Ensure weight and maxWeight are valid to prevent scale issues
+    const safeWeight = Math.max(0, frogState.weight);
+    const safeMaxWeight = Math.max(1, frogState.maxWeight);
+    let weightScale = Math.max(1.0, 1 + (safeWeight / safeMaxWeight) * 0.8);
+    
+    // When caught by fishing rod, reset to normal size
+    if (hook.hookedByFishingRod && fishingRod.isCaught) {
+        weightScale = 1.0;
+    }
 
     // Handle falling state
     if (frogState.isFalling) {
@@ -693,10 +729,10 @@ export function drawFrog(hookState) {
         ctx.ellipse(18, -47 + (12 - eyeHeight), 13, 12 - eyeHeight + 2, 0, Math.PI, Math.PI * 2);
         ctx.fill();
     } else {
-        // Eyes fully open
-        const glassesScale = frogState.isWearingGlasses ? 1.3 : 1; // Bigger eyes with glasses
-        const eyeRadius = 12 * glassesScale;
-        
+        // Eyes fully open - bigger base size
+        const glassesScale = frogState.isWearingGlasses ? 1.3 : 1;
+        const eyeRadius = 14 * glassesScale; // Increased from 12 to 14
+
         if (isEvolved) {
             ctx.fillStyle = '#fef08a';
             ctx.shadowColor = '#fbbf24';
@@ -714,31 +750,35 @@ export function drawFrog(hookState) {
 
         // Check if victory state - draw hearts instead of pupils
         if (frogState.isVictory) {
-            // Left heart
+            // Pulsing animation for hearts (scale between 1.0 and 1.4)
+            const heartPulse = Date.now() * 0.008;
+            const heartScale = 1.2 + Math.sin(heartPulse) * 0.2;
+
+            // Left heart - centered in eye with pulsing animation
             ctx.fillStyle = '#ef4444';
             ctx.save();
             ctx.translate(-18, -47);
-            ctx.scale(0.6, 0.6);
+            ctx.scale(heartScale, heartScale);
             ctx.beginPath();
-            ctx.moveTo(0, 2);
-            ctx.bezierCurveTo(-5, -2, -8, 0, -8, 5);
-            ctx.bezierCurveTo(-8, 8, -5, 10, 0, 13);
-            ctx.bezierCurveTo(5, 10, 8, 8, 8, 5);
-            ctx.bezierCurveTo(8, 0, 5, -2, 0, 2);
+            ctx.moveTo(0, -5);
+            ctx.bezierCurveTo(-5, -9, -8, -7, -8, -2);
+            ctx.bezierCurveTo(-8, 1, -5, 3, 0, 6);
+            ctx.bezierCurveTo(5, 3, 8, 1, 8, -2);
+            ctx.bezierCurveTo(8, -7, 5, -9, 0, -5);
             ctx.fill();
             ctx.restore();
 
-            // Right heart
+            // Right heart - centered in eye with pulsing animation
             ctx.fillStyle = '#ef4444';
             ctx.save();
             ctx.translate(18, -47);
-            ctx.scale(0.6, 0.6);
+            ctx.scale(heartScale, heartScale);
             ctx.beginPath();
-            ctx.moveTo(0, 2);
-            ctx.bezierCurveTo(-5, -2, -8, 0, -8, 5);
-            ctx.bezierCurveTo(-8, 8, -5, 10, 0, 13);
-            ctx.bezierCurveTo(5, 10, 8, 8, 8, 5);
-            ctx.bezierCurveTo(8, 0, 5, -2, 0, 2);
+            ctx.moveTo(0, -5);
+            ctx.bezierCurveTo(-5, -9, -8, -7, -8, -2);
+            ctx.bezierCurveTo(-8, 1, -5, 3, 0, 6);
+            ctx.bezierCurveTo(5, 3, 8, 1, 8, -2);
+            ctx.bezierCurveTo(8, -7, 5, -9, 0, -5);
             ctx.fill();
             ctx.restore();
 
@@ -763,8 +803,182 @@ export function drawFrog(hookState) {
             // Check if frog is scared (shaking from weight)
             const isScared = frogState.isShaking;
             
-            // Check if poisoned - dizzy spinning eyes
-            if (frogState.isPoisoned) {
+            // Check if caught by fishing rod - panicked scared expression
+            if (hook.hookedByFishingRod && fishingRod.isCaught) {
+                // Only draw antidote bottles if frog has any
+                if (frogState.antidoteCount > 0) {
+                    // Show exactly how many bottles frog has (max 3 for display)
+                    const totalBottles = Math.min(frogState.antidoteCount, 3);
+                    
+                    // Calculate which bottle should disappear based on timer
+                    // After 3 seconds (180 frames), 3 bottles will be consumed
+                    const timePerBottle = 60; // 1 second per bottle
+                    const currentBottleIndex = Math.floor(hook.caughtTimer / timePerBottle);
+                    const fadeProgress = (hook.caughtTimer % timePerBottle) / timePerBottle;
+                    
+                    ctx.save();
+                    
+                    // Draw bottles from right to left (disappear from right)
+                    for (let i = 0; i < totalBottles; i++) {
+                        // Should this bottle disappear?
+                        if (i < currentBottleIndex) continue; // Already consumed
+                        
+                        const bottleIndex = i - currentBottleIndex; // Position index
+                        const x = -30 + bottleIndex * 30; // Space bottles evenly (bigger spacing)
+                        const y = -100;
+                        
+                        // Apply fade to the first bottle being consumed
+                        const isDisappearing = (i === currentBottleIndex);
+                        const alpha = isDisappearing ? (1 - fadeProgress) : 1.0;
+                        const scale = isDisappearing ? (1 - fadeProgress * 0.5) : 1.0;
+                        
+                        ctx.save();
+                        ctx.globalAlpha = alpha;
+                        ctx.translate(x, y);
+                        ctx.scale(scale, scale);
+                        
+                        // Draw bigger, more beautiful antidote bottle
+                        // Glow effect
+                        const glowGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 15);
+                        glowGradient.addColorStop(0, 'rgba(168, 85, 247, 0.4)');
+                        glowGradient.addColorStop(1, 'rgba(168, 85, 247, 0)');
+                        ctx.fillStyle = glowGradient;
+                        ctx.beginPath();
+                        ctx.arc(0, 0, 15, 0, Math.PI * 2);
+                        ctx.fill();
+                        
+                        // Bottle body - purple gradient (bigger)
+                        const bottleGradient = ctx.createLinearGradient(-6, -10, 6, 10);
+                        bottleGradient.addColorStop(0, '#c084fc');
+                        bottleGradient.addColorStop(0.3, '#a855f7');
+                        bottleGradient.addColorStop(0.7, '#9333ea');
+                        bottleGradient.addColorStop(1, '#7e22ce');
+                        
+                        ctx.fillStyle = bottleGradient;
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+                        ctx.lineWidth = 1.2;
+                        
+                        // Bottle shape (bigger and more detailed)
+                        ctx.beginPath();
+                        ctx.moveTo(-5, 8);
+                        ctx.lineTo(-6, -3);
+                        ctx.lineTo(-4, -9);
+                        ctx.lineTo(4, -9);
+                        ctx.lineTo(6, -3);
+                        ctx.lineTo(5, 8);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
+                        
+                        // Cork/cap
+                        ctx.fillStyle = '#78350f';
+                        ctx.fillRect(-4, -11, 8, 3);
+                        
+                        // Cork highlight
+                        ctx.fillStyle = '#92400e';
+                        ctx.fillRect(-3, -10, 6, 1);
+                        
+                        // Liquid glow inside (animated)
+                        ctx.save();
+                        ctx.globalAlpha = alpha * (0.7 + Math.sin(Date.now() * 0.01 + i) * 0.2);
+                        const liquidGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 5);
+                        liquidGradient.addColorStop(0, '#f3e8ff');
+                        liquidGradient.addColorStop(0.5, '#e9d5ff');
+                        liquidGradient.addColorStop(1, 'rgba(168, 85, 247, 0.5)');
+                        ctx.fillStyle = liquidGradient;
+                        ctx.beginPath();
+                        ctx.ellipse(0, 0, 3, 5, 0, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.restore();
+                        
+                        // Highlight on bottle
+                        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                        ctx.beginPath();
+                        ctx.ellipse(-3, -4, 2, 5, -0.3, 0, Math.PI * 2);
+                        ctx.fill();
+                        
+                        ctx.restore();
+                    }
+                    
+                    ctx.restore();
+                }
+                
+                // Draw white eyes first
+                const eyeRadius = 14;
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(-18, -47, eyeRadius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(18, -47, eyeRadius, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // SCARED EYES - wider and shaking violently
+                const fearShakeX = Math.sin(Date.now() * 0.03) * 4;
+                const fearShakeY = Math.cos(Date.now() * 0.04) * 4;
+                
+                // Eyes look around in panic
+                const panicAngle = Math.sin(Date.now() * 0.015) * Math.PI * 0.7;
+                const pupilOffset = 5;
+                
+                // Draw smaller trembling pupils (scared look)
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(-18 + Math.cos(panicAngle) * pupilOffset + fearShakeX, -47 + Math.sin(panicAngle) * pupilOffset * 0.5 + fearShakeY, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(18 + Math.cos(panicAngle) * pupilOffset + fearShakeX, -47 + Math.sin(panicAngle) * pupilOffset * 0.5 + fearShakeY, 3, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Add many sweat drops falling (more panic)
+                const sweatTime = Date.now() * 0.015;
+                for (let i = 0; i < 6; i++) {
+                    const sweatY = ((-30 + Math.sin(sweatTime + i * 1.2) * 15) % 40) - 30;
+                    const sweatX = -45 + i * 18;
+                    ctx.fillStyle = 'rgba(100, 150, 255, 0.7)';
+                    ctx.beginPath();
+                    ctx.ellipse(sweatX, sweatY, 4, 6, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Add small water splash effects
+                    ctx.fillStyle = 'rgba(150, 200, 255, 0.4)';
+                    ctx.beginPath();
+                    ctx.arc(sweatX - 2, sweatY - 3, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                // Draw mouth biting the bait - closed mouth
+                const biteY = -18 + Math.sin(Date.now() * 0.02) * 1;
+                
+                // Upper lip
+                ctx.fillStyle = mainColor;
+                ctx.beginPath();
+                ctx.ellipse(0, biteY - 3, 16, 6, 0, 0, Math.PI);
+                ctx.fill();
+                
+                // Lower lip
+                ctx.beginPath();
+                ctx.ellipse(0, biteY + 3, 14, 5, 0, Math.PI, Math.PI * 2);
+                ctx.fill();
+                
+                // Mouth line (closed, biting)
+                ctx.strokeStyle = darkColor;
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.moveTo(-14, biteY);
+                ctx.quadraticCurveTo(0, biteY + 2, 14, biteY);
+                ctx.stroke();
+                
+                // Corner lines of mouth
+                ctx.beginPath();
+                ctx.moveTo(-15, biteY);
+                ctx.lineTo(-13, biteY - 2);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(15, biteY);
+                ctx.lineTo(13, biteY - 2);
+                ctx.stroke();
+            } else if (frogState.isPoisoned) {
                 // Spinning dizzy eyes - larger and more visible
                 const spinTime = Date.now() * 0.008; // Slower for more visible rotation
                 const spinRadius = 9; // Much larger spirals
@@ -1143,14 +1357,16 @@ export function drawFrog(hookState) {
         }
     }
 
-    // Mouth
+    // Mouth - declare variables outside conditional for use later
     const isChewing = frogState.isChewing;
     const chewCycle = Math.sin(frogState.chewPhase) * 0.5 + 0.5;
     const levelBonus = Math.min(frogState.level * 2, 15);
     const baseMouthWidth = 18 + levelBonus;
     const isAiming = hookState === 'ready' && gameState.state === 'playing';
 
-    if (isDead) {
+    // Skip mouth drawing if caught by fishing rod (panic mouth already drawn above)
+    if (!(hook.hookedByFishingRod && fishingRod.isCaught)) {
+        if (isDead) {
         // Dead - tongue hanging out with nice curve
         const tongueLength = 45;
         const tongueCurve = Math.sin(Date.now() * 0.002) * 3; // Slight sway
@@ -1297,6 +1513,7 @@ export function drawFrog(hookState) {
         ctx.ellipse(28, -15, 8 + puffAmount, 6 + puffAmount * 0.5, 0, 0, Math.PI * 2);
         ctx.fill();
     }
+    } // End mouth section (skip if caught)
 
     // Spots on body
     ctx.fillStyle = darkColor;

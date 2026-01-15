@@ -31,6 +31,7 @@
             <div>Liên tục: <span id="combo">0</span></div>
             <div>Chiều cao lá sen: <span id="level">0</span></div>
             <div>Tiếp theo: <span id="next-level">0/100</span></div>
+            <div>🧪 Thuốc giải: <span id="antidote-count" style="color: #a855f7; font-weight: bold;">0</span></div>
         </div>
         
         <div class="game-guide" id="gameGuide" style="display: none;">
@@ -65,13 +66,19 @@
                     <span class="guide-icon"><i class="fas fa-fish"></i></span>
                     <div>
                         <strong>Cá</strong> tăng 200 cân, không có điểm. <br>
-                        <strong>Ngoài ra: </strong> sau level 7 sẽ có <strong>bọ cánh cứng</strong> 🐞 sẽ bò lên đến 1 vị trí cố định làm chiếm 200 cân tải trọng của lá sen, cần đuổi nó đi để tránh vượt quá tải trọng.
+                        <strong>Ngoài ra: </strong> sau level 7 sẽ có <strong>bọ cánh cứng</strong> 🐞 sẽ bò lên đến 1 vị trí cố định làm chiếm 200 cân tải trọng của lá sen, (sau level 15 là 300 cân và tăng từ từ), cần đuổi nó đi để tránh vượt quá tải trọng.
                     </div>
                 </div>
                 <div class="guide-item">
                     <span class="guide-icon"><i class="fas fa-skull-crossbones"></i></span>
                     <div>
-                        <strong>Đom đóm</strong> có độc! Ăn 1 côn trùng bất kỳ để giải độc
+                        <strong>Đom đóm</strong> có độc! Ăn 1 côn trùng bất kỳ để giải độc, hoặc dùng thuốc giải tự động nếu có
+                    </div>
+                </div>
+                <div class="guide-item">
+                    <span class="guide-icon"><i class="fas fa-solid fa-leaf"></i></span>
+                    <div>
+                        <strong>Thuốc giải độc (Tím):</strong> Xuất hiện mỗi 3 level (3, 6, 9...). Tự động dùng khi ếch sắp chết vì độc! <strong>Dùng 3 lọ để thoát khỏi câu cá</strong> 🎣
                     </div>
                 </div>
                 <div class="guide-item">
@@ -123,7 +130,7 @@
                             <i class="fas fa-flask"></i> Developer Mode: <span id="devModeStatus">OFF</span>
                         </button>
                         <div style="font-size: 12px; color: #888; margin-top: 5px;">
-                            (Test nhanh các tính năng - Điểm lên level giảm 80%)
+                            (Test nhanh các tính năng - Điểm lên level giảm 95%)
                         </div>
                     </div>
                 </div>
@@ -133,7 +140,7 @@
 
     <script type="module" src="js/main.js"></script>
     <script type="module">
-        import { toggleDevMode, isDevMode } from './js/state.js';
+        import { toggleDevMode, isDevMode, updateScoreUI } from './js/state.js';
         
         // Toggle guide display
         const toggleGuideBtn = document.getElementById('toggleGuideBtn');
@@ -196,12 +203,14 @@
         // Update dev mode status on load
         devModeStatus.textContent = isDevMode() ? 'ON' : 'OFF';
         devModeBtn.style.background = isDevMode() ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #6b7280, #4b5563)';
+        updateScoreUI(); // Update next level display based on dev mode
         
         // Developer Mode toggle
         devModeBtn.addEventListener('click', () => {
             const newMode = toggleDevMode();
             devModeStatus.textContent = newMode ? 'ON' : 'OFF';
             devModeBtn.style.background = newMode ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #6b7280, #4b5563)';
+            updateScoreUI(); // Update next level display immediately
             
             // Show notification
             const notification = document.createElement('div');

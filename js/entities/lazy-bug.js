@@ -14,11 +14,12 @@ let frogStateRef = null;
 
 // Ladybug spawn timer - only spawn if no ladybug exists
 let crabSpawnTimer = 0;
-const CRAB_SPAWN_INTERVAL = 600; // 10 seconds (60 fps * 10)
+const CRAB_SPAWN_INTERVAL = 300; // 5 seconds (60 fps * 5)
 
 // Constants for weight calculation
 const WEIGHT_PER_PROGRESS = 200; // Full climb (progress 0->1) = 200 weight
-const MAX_CRAB_WEIGHT = 200; // Maximum weight a ladybug can add
+const MAX_CRAB_WEIGHT = 200; // Maximum weight a ladybug can add (level <= 15)
+const MAX_CRAB_WEIGHT_HIGH_LEVEL = 300; // Maximum weight for level > 15
 
 // Color thresholds for weight (green → yellow → orange → red)
 function getCrabColor(weight) {
@@ -67,7 +68,7 @@ function spawnCrab() {
 
     // Spawn on left or right side of the stem
     const side = Math.random() > 0.5 ? 1 : -1;
-    const speed = 0.0015 + Math.random() * 0.001; // Random speed
+    const speed = 0.003 + Math.random() * 0.002; // Random speed (faster)
 
     const crab = {
         // Position on stem (0 = bottom, 1 = top at lily pad)
@@ -184,51 +185,80 @@ export function updateCrabs() {
             const stemPos = getStemPosition(crab.stemProgress);
             crab.x = stemPos.x + crab.side * 2; // Bám sát vào cuống hơn
             crab.y = stemPos.y;
-            
+
             // Cập nhật bug tilt effect cho lily pad
             if (frogLilyPadRef) {
                 frogLilyPadRef.bugTilt = crab.side; // -1 hoặc 1
                 frogLilyPadRef.bugWeight = crab.stemProgress * 0.8; // Tăng theo độ cao
             }
 
-            // Tính vị trí mục tiêu: thấp hơn ếch 50px
-            const stemStartY = CANVAS_HEIGHT + 20;
-            const stemEndY = frogLilyPadRef.y + 10;
-            const targetY = frogLilyPadRef.y + 50; // Thấp hơn ếch 50px
-            const targetProgress = (targetY - stemStartY) / (stemEndY - stemStartY);
-            
-            // Kiểm tra xem đã đến vị trí mục tiêu chưa
-            if (crab.stemProgress >= targetProgress && !crab.hasReachedTarget) {
-                crab.hasReachedTarget = true;
-                crab.climbSpeed = 0; // Ngừng bò
-                
-                // Chỉ lúc này mới áp dụng cân nặng 200
-                const newWeight = calculateCrabWeight(crab);
+            // Logic khác nhau cho level <= 15 và level > 15
+            const currentLevel = frogStateRef ? frogStateRef.level : 1;
+
+            if (currentLevel > 15) {
+                // Level > 15: Cân nặng tăng dần khi bò lên, tối đa 300
+                const maxWeight = MAX_CRAB_WEIGHT_HIGH_LEVEL; // 300
+                const newWeight = Math.min(Math.floor(crab.stemProgress * maxWeight), maxWeight);
                 const weightDiff = newWeight - crab.currentWeight;
-                
+
                 if (weightDiff !== 0 && frogStateRef) {
                     frogStateRef.weight += weightDiff;
                     crab.currentWeight = newWeight;
-                    
-                    // Trigger shake when reaching 200 weight
+
+                    // Trigger shake khi cân nặng cao
                     if (frogStateRef.weight >= 200 && !frogStateRef.isShaking) {
                         frogStateRef.isShaking = true;
                         frogStateRef.shakeTimer = 0;
-                        frogStateRef.shakeDuration = 60; // 1 giây rung
+                        frogStateRef.shakeDuration = 60;
                     }
                 }
-            } else if (crab.hasReachedTarget && crab.stemProgress < targetProgress) {
-                // Nếu ếch leo cao hơn, bọ rùa tiếp tục bò theo
-                crab.hasReachedTarget = false;
-                crab.climbSpeed = crab.baseClimbSpeed;
-                
-                // Trừ cân nặng khi bọ rùa bắt đầu bò lại
-                if (crab.currentWeight > 0 && frogStateRef) {
-                    frogStateRef.weight -= crab.currentWeight;
-                    crab.currentWeight = 0;
+
+                // Dừng khi đạt 300 cân nặng
+                if (crab.currentWeight >= maxWeight) {
+                    crab.hasReachedTarget = true;
+                    crab.climbSpeed = 0; // Ngừng bò
+                }
+            } else {
+                // Level <= 15: Logic cũ - chỉ áp dụng cân nặng khi đến vị trí mục tiêu
+                // Tính vị trí mục tiêu: thấp hơn ếch 50px
+                const stemStartY = CANVAS_HEIGHT + 20;
+                const stemEndY = frogLilyPadRef.y + 10;
+                const targetY = frogLilyPadRef.y + 50; // Thấp hơn ếch 50px
+                const targetProgress = (targetY - stemStartY) / (stemEndY - stemStartY);
+
+                // Kiểm tra xem đã đến vị trí mục tiêu chưa
+                if (crab.stemProgress >= targetProgress && !crab.hasReachedTarget) {
+                    crab.hasReachedTarget = true;
+                    crab.climbSpeed = 0; // Ngừng bò
+
+                    // Chỉ lúc này mới áp dụng cân nặng 200
+                    const newWeight = calculateCrabWeight(crab);
+                    const weightDiff = newWeight - crab.currentWeight;
+
+                    if (weightDiff !== 0 && frogStateRef) {
+                        frogStateRef.weight += weightDiff;
+                        crab.currentWeight = newWeight;
+
+                        // Trigger shake when reaching 200 weight
+                        if (frogStateRef.weight >= 200 && !frogStateRef.isShaking) {
+                            frogStateRef.isShaking = true;
+                            frogStateRef.shakeTimer = 0;
+                            frogStateRef.shakeDuration = 60; // 1 giây rung
+                        }
+                    }
+                } else if (crab.hasReachedTarget && crab.stemProgress < targetProgress) {
+                    // Nếu ếch leo cao hơn, bọ rùa tiếp tục bò theo
+                    crab.hasReachedTarget = false;
+                    crab.climbSpeed = crab.baseClimbSpeed;
+
+                    // Trừ cân nặng khi bọ rùa bắt đầu bò lại
+                    if (crab.currentWeight > 0 && frogStateRef) {
+                        frogStateRef.weight -= crab.currentWeight;
+                        crab.currentWeight = 0;
+                    }
                 }
             }
-            
+
             // Check if reached max progress (backup)
             if (crab.stemProgress >= 1) {
                 crab.stemProgress = 1;

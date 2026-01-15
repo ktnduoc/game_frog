@@ -1,6 +1,6 @@
 // Main game entry point
 import { FISH_SPAWN_INTERVAL, RIBBIT_INTERVAL } from './config.js';
-import { gameState, frogState, timers, updateDigestion, dayNightState, updateDayNight } from './state.js';
+import { gameState, frogState, frogEvolution, timers, updateDigestion, dayNightState, updateDayNight } from './state.js';
 import { initCanvas, ctx, canvas, clearCanvas } from './utils/canvas.js';
 import { initInput, setShootCallback } from './utils/input.js';
 import { initAudio, getAudioContext, playRibbitSound, loadBackgroundMusic, playBackgroundMusic, pauseBackgroundMusic, toggleMute, isMusicMuted, playFallInWaterSound } from './audio/audio.js';
@@ -550,11 +550,12 @@ import { lotusFlower, lotusFlower2, updateLotusFlowers, drawLotusFlower } from '
 import { holyWater, updateHolyWater, drawHolyWater } from './entities/holywater.js';
 import { digestPotion, updateDigestPotion, drawDigestPotion } from './entities/digestpotion.js';
 import { leafPotion, updateLeafPotion, drawLeafPotion } from './entities/leafpotion.js';
+import { antidotePotions, updateAntidotePotion, drawAntidotePotion, drawAntidoteBird, drawAntidoteParticles, resetAntidoteSystem } from './entities/antidotepotion.js';
 import { caterpillars, initCaterpillars, updateCaterpillars, drawCaterpillars, checkCaterpillarHit, eatCaterpillar, resetCaterpillars } from './entities/caterpillar.js';
 import { crabs, initCrabs, updateCrabs, drawCrabs, resetCrabs } from './entities/lazy-bug.js';
 
 // Environment
-import { drawBackground, drawVictoryWalls, getFinishLineY } from './environment/background.js';
+import { drawBackground, drawVictoryWalls, getFinishLineY, fishingRod, drawFishingRod } from './environment/background.js';
 import { initBirds, updateBirds } from './environment/birds.js';
 import { initClouds, updateClouds } from './environment/clouds.js';
 import { frogLilyPad, drawFrogLilyPad, updateHealParticles, drawHealParticles, updateLilyPadFlash } from './environment/lilypad.js';
@@ -1027,55 +1028,85 @@ function updateFalling() {
 
 // Game Over UI
 function drawGameOver() {
+    // Update game over timer for animation
+    gameState.gameOverTimer++;
+
+    // Calculate slide-up animation
+    const slideUpDuration = 60; // 1 second to slide up
+    const slideProgress = Math.min(gameState.gameOverTimer / slideUpDuration, 1);
+    // Ease-out animation
+    const easedProgress = 1 - Math.pow(1 - slideProgress, 3);
+    const modalOffsetY = (1 - easedProgress) * canvas.height;
+
+    ctx.save();
+    ctx.translate(0, modalOffsetY);
+
     // Dark overlay
     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, -modalOffsetY, canvas.width, canvas.height + modalOffsetY);
+
+    // Death reason message (above restart button)
+    if (gameState.deathReason === 'poison') {
+        ctx.save();
+        ctx.font = 'bold 32px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // Text shadow
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillText('Bạn đã thua do trúng độc', canvas.width / 2 + 2, canvas.height / 2 - 80 + 2);
+
+        // Main text - red color for poison
+        ctx.fillStyle = '#ef4444';
+        ctx.fillText('Bạn đã thua do trúng độc', canvas.width / 2, canvas.height / 2 - 80);
+        ctx.restore();
+    }
 
     // Replay icon button (circular)
     const buttonRadius = 45;
     const buttonX = canvas.width / 2;
     const buttonY = canvas.height / 2;
 
-    // Button hover effect
+    // Button hover effect (adjust for modal offset)
     const mouseX = gameState.mouseX;
-    const mouseY = gameState.mouseY;
+    const mouseY = gameState.mouseY - modalOffsetY;
     const distance = Math.sqrt((mouseX - buttonX) ** 2 + (mouseY - buttonY) ** 2);
     const isHovering = distance <= buttonRadius;
 
     ctx.save();
-    
+
     // Outer glow when hovering
     if (isHovering) {
         ctx.shadowBlur = 20;
         ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
     }
-    
+
     // Button background circle
     ctx.fillStyle = isHovering ? '#8b9199' : '#6b7280';
     ctx.beginPath();
     ctx.arc(buttonX, buttonY, buttonRadius, 0, Math.PI * 2);
     ctx.fill();
-    
+
     // Inner darker circle for depth
     ctx.shadowBlur = 0;
     ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
     ctx.beginPath();
     ctx.arc(buttonX, buttonY, buttonRadius - 3, 0, Math.PI * 2);
     ctx.fill();
-    
+
     // White border
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.arc(buttonX, buttonY, buttonRadius, 0, Math.PI * 2);
     ctx.stroke();
-    
+
     ctx.restore();
 
     // Replay icon
     ctx.save();
     ctx.translate(buttonX, buttonY);
-    
+
     // Arrow circle path
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 4;
@@ -1083,7 +1114,7 @@ function drawGameOver() {
     ctx.beginPath();
     ctx.arc(0, 0, 18, 0.5, Math.PI * 2 - 0.3);
     ctx.stroke();
-    
+
     // Arrow head
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
@@ -1092,7 +1123,10 @@ function drawGameOver() {
     ctx.lineTo(15, 0);
     ctx.closePath();
     ctx.fill();
-    
+
+    ctx.restore();
+
+    // Restore modal translation
     ctx.restore();
 }
 
@@ -1103,6 +1137,8 @@ function resetGame() {
     gameState.score = 0;
     gameState.combo = 0;
     gameState.introTimer = 0;
+    gameState.gameOverTimer = 0;
+    gameState.deathReason = '';
 
     // Reset day/night cycle
     dayNightState.phase = 'day';
@@ -1124,6 +1160,7 @@ function resetGame() {
     frogState.isPoisoned = false;
     frogState.poisonTimer = 0;
     frogState.isDead = false;
+    frogState.antidoteCount = 0; // Reset antidote inventory
     frogState.hungerTimer = 0;
     frogState.isStarving = false;
     // Reset digestion
@@ -1135,6 +1172,10 @@ function resetGame() {
     frogState.pendingFood = [];
     frogState.digestionSpeed = 1;
     frogState.digestionBoostTimer = 0;
+    frogState.digestionTimeBonus = 0;
+    // Reset double points buff
+    frogState.doublePointsActive = false;
+    frogState.doublePointsTimer = 0;
     // Reset falling
     frogState.isFalling = false;
     frogState.fallY = 0;
@@ -1143,6 +1184,11 @@ function resetGame() {
     // Reset shake state
     frogState.shakeTimer = 0;
     frogState.isShaking = false;
+
+    // Reset frog evolution
+    frogEvolution.isEvolved = false;
+    frogEvolution.glowIntensity = 0;
+    frogEvolution.evolutionTimer = 0;
 
     // Reset frog position
     frog.isInIntro = true;
@@ -1161,6 +1207,14 @@ function resetGame() {
     hook.hookedFish = null;
     hook.hookedDigestPotion = false;
     hook.hookedCaterpillar = null;
+    hook.hookedByFishingRod = false; // Reset fishing rod hook state
+    hook.caughtTimer = 0; // Reset caught timer
+
+    // Reset fishing rod
+    fishingRod.isCaught = false;
+    fishingRod.hookY = 200; // Reset to initial position (raised 50px higher)
+    fishingRod.isLowering = false;
+    fishingRod.isActive = false; // Will be activated at level 15
 
     // Reset caterpillars and lily pad damage
     resetCaterpillars();
@@ -1220,11 +1274,15 @@ function resetGame() {
     leafPotion.spawnTimer = 0;
     leafPotion.spawnedCount = 0; // Reset spawn counter
 
+    // Reset antidote system
+    resetAntidoteSystem();
+
     // Update UI
     document.getElementById('score').textContent = '0';
     document.getElementById('combo').textContent = '0';
     document.getElementById('level').textContent = '0';
     document.getElementById('next-level').textContent = '0/100';
+    document.getElementById('antidote-count').textContent = '0';
 }
 
 // Initialize game
@@ -1260,14 +1318,32 @@ function init() {
             const rect = canvas.getBoundingClientRect();
             const scaleX = canvas.width / rect.width;
             const scaleY = canvas.height / rect.height;
-            
+
             const canvasX = (clientX - rect.left) * scaleX;
-            const canvasY = (clientY - rect.top) * scaleY;
+            let canvasY = (clientY - rect.top) * scaleY;
+
+            // Calculate modal offset for animation
+            let modalOffsetY = 0;
+            if (gameState.state === 'gameover') {
+                const slideUpDuration = 60;
+                const slideProgress = Math.min(gameState.gameOverTimer / slideUpDuration, 1);
+                const easedProgress = 1 - Math.pow(1 - slideProgress, 3);
+                modalOffsetY = (1 - easedProgress) * canvas.height;
+            } else if (gameState.state === 'victory') {
+                const timeSinceDelay = frogState.victoryJumpTimer - frogState.victoryModalDelay;
+                const slideUpDuration = 60;
+                const slideProgress = Math.min(timeSinceDelay / slideUpDuration, 1);
+                const easedProgress = 1 - Math.pow(1 - slideProgress, 3);
+                modalOffsetY = (1 - easedProgress) * canvas.height;
+            }
+
+            // Adjust click position for modal offset
+            canvasY = canvasY - modalOffsetY;
 
             const buttonRadius = 45;
             const buttonX = canvas.width / 2;
             const buttonY = gameState.state === 'gameover' ? canvas.height / 2 : canvas.height / 2 + 130;
-            
+
             const distance = Math.sqrt((canvasX - buttonX) ** 2 + (canvasY - buttonY) ** 2);
             if (distance <= buttonRadius) {
                 resetGame();
@@ -1588,7 +1664,11 @@ function gameLoop() {
     drawHolyWater();
     drawDigestPotion();
     drawLeafPotion();
+    drawAntidoteBird();
+    drawAntidotePotion();
+    drawAntidoteParticles();
     drawFrog(hook.state);
+    drawFishingRod(); // Draw fishing rod bait in front of frog
     drawCaterpillars(); // Draw caterpillars on top of frog
     drawCrabs(); // Draw crabs (level 7+)
     drawHook();
@@ -1633,6 +1713,7 @@ function gameLoop() {
         updateHolyWater();
         updateDigestPotion();
         updateLeafPotion();
+        updateAntidotePotion();
         updateHealParticles();
         updateLilyPadFlash();
         updateDigestion();

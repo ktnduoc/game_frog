@@ -10,9 +10,11 @@ import { frogLilyPad } from '../environment/lilypad.js';
 import { holyWater } from './holywater.js';
 import { digestPotion } from './digestpotion.js';
 import { leafPotion } from './leafpotion.js';
+import { antidotePotions } from './antidotepotion.js';
 import { eatCaterpillar } from './caterpillar.js';
 import { checkCrabHit, pushCrabDown } from './lazy-bug.js';
 import { initAudio, playTongueSound, playEatSound, playLevelUpSound, playMissSound, playFireflySound, playHolyWaterSound, playCaptureSound } from '../audio/audio.js';
+import { fishingRod } from '../environment/background.js';
 
 // Hook object
 export const hook = {
@@ -30,7 +32,10 @@ export const hook = {
     hookedHolyWater: false,
     hookedDigestPotion: false,
     hookedLeafPotion: false,
-    hookedCaterpillar: null
+    hookedAntidotePotion: false,
+    hookedCaterpillar: null,
+    hookedByFishingRod: false, // Frog caught by fishing rod trap
+    caughtTimer: 0 // Timer for how long frog has been caught (frames)
 };
 
 // Get tongue length based on level (starts at 100, +20 per level)
@@ -50,6 +55,8 @@ export function shootHook() {
     if (frogState.isDead || frogState.isFalling) return;
     // Don't shoot while chewing
     if (frogState.isChewing) return;
+    // Don't shoot if caught by fishing rod
+    if (hook.hookedByFishingRod) return;
 
     // Initialize audio on first interaction
     initAudio();
@@ -61,8 +68,14 @@ export function shootHook() {
     playTongueSound();
 
     // Calculate angle to mouse
-    const dx = gameState.mouseX - frog.x;
+    let dx = gameState.mouseX - frog.x;
     const dy = gameState.mouseY - (frog.y - 20);
+
+    // When poisoned, reverse X direction (tongue shoots opposite side)
+    if (frogState.isPoisoned) {
+        dx = -dx;
+    }
+
     hook.angle = Math.atan2(dy, dx);
 }
 
@@ -98,6 +111,29 @@ export function updateHook() {
             }
         }
 
+        // Check collision with fishing rod bait (trap!)
+        if (fishingRod.isActive && !fishingRod.isCaught && !hook.hookedByFishingRod) {
+            const baitX = fishingRod.getBaitX();
+            const baitY = fishingRod.getBaitY();
+            const baitSize = fishingRod.baitSize;
+            
+            const dist = Math.sqrt(
+                (hookTipX - baitX) ** 2 +
+                (hookTipY - baitY) ** 2
+            );
+            
+            // If tongue touches the bait (increased hitbox for easier catch)
+            if (dist < baitSize * 1.3) {
+                // Get caught - will have 3 seconds to use antidotes
+                hook.hookedByFishingRod = true;
+                hook.caughtTimer = 0; // Start timer
+                fishingRod.isCaught = true;
+                hook.state = 'returning';
+                gameState.deathReason = 'fishing-rod';
+                playCaptureSound();
+            }
+        }
+
         // Check collision with holy water
         if (holyWater.active && !hook.hookedEnemy && !hook.hookedFish && !hook.hookedHolyWater &&
             hookTipX > holyWater.x - holyWater.width / 2 &&
@@ -130,11 +166,29 @@ export function updateHook() {
             hook.state = 'returning';
         }
 
+        // Check collision with antidote potions (multiple on well)
+        if (!hook.hookedEnemy && !hook.hookedFish && !hook.hookedHolyWater && !hook.hookedDigestPotion && !hook.hookedLeafPotion && !hook.hookedAntidotePotion) {
+            for (let i = antidotePotions.length - 1; i >= 0; i--) {
+                const potion = antidotePotions[i];
+                // Check collision with potion center
+                if (hookTipX > potion.x + potion.width / 2 - 10 &&
+                    hookTipX < potion.x + potion.width / 2 + 10 &&
+                    hookTipY > potion.y + potion.height / 2 - 13 &&
+                    hookTipY < potion.y + potion.height / 2 + 13) {
+                    hook.hookedAntidotePotion = true;
+                    antidotePotions.splice(i, 1); // Remove this potion
+                    hook.state = 'returning';
+                    playCaptureSound();
+                    break;
+                }
+            }
+        }
+
         // Caterpillars are caught by clicking directly on them, not by tongue
         // (tongue passes through caterpillars)
 
         // Check collision with crabs (push them down, don't catch)
-        if (!hook.hookedEnemy && !hook.hookedFish && !hook.hookedHolyWater && !hook.hookedDigestPotion && !hook.hookedLeafPotion && !hook.hookedCaterpillar) {
+        if (!hook.hookedEnemy && !hook.hookedFish && !hook.hookedHolyWater && !hook.hookedDigestPotion && !hook.hookedLeafPotion && !hook.hookedAntidotePotion && !hook.hookedCaterpillar) {
             const hitCrab = checkCrabHit(hookTipX, hookTipY);
             if (hitCrab) {
                 pushCrabDown(hitCrab);
@@ -145,7 +199,7 @@ export function updateHook() {
 
         // Check collision with insects
         for (let enemy of enemies) {
-            if (!hook.hookedEnemy && !hook.hookedFish && !hook.hookedHolyWater && !hook.hookedDigestPotion && !hook.hookedLeafPotion &&
+            if (!hook.hookedEnemy && !hook.hookedFish && !hook.hookedHolyWater && !hook.hookedDigestPotion && !hook.hookedLeafPotion && !hook.hookedAntidotePotion &&
                 hookTipX > enemy.x - enemy.width / 2 &&
                 hookTipX < enemy.x + enemy.width / 2 &&
                 hookTipY > enemy.y - enemy.height / 2 &&
@@ -302,6 +356,8 @@ export function updateHook() {
                         frogState.isPoisoned = false;
                         frogState.poisonTimer = 0;
                     }
+                    // Increase digestion time bonus by 0.1s (6 frames) - stacks
+                    frogState.digestionTimeBonus += 6;
                     playEatSound();
                 }
 
@@ -474,6 +530,28 @@ export function updateHook() {
 
                 hook.hookedLeafPotion = false;
             }
+            // Antidote potion was caught - adds to inventory
+            else if (hook.hookedAntidotePotion) {
+                // Add antidote to inventory
+                frogState.antidoteCount++;
+                
+                // Update UI
+                const antidoteElement = document.getElementById('antidote-count');
+                if (antidoteElement) {
+                    antidoteElement.textContent = frogState.antidoteCount;
+                }
+
+                // Flash effect
+                frogState.flashColor = '#a855f7';
+                frogState.flashTimer = frogState.flashDuration;
+
+                // Play healing sound
+                playHolyWaterSound();
+
+                // No need to deactivate - already removed from array during collision
+
+                hook.hookedAntidotePotion = false;
+            }
             // Caterpillar was caught
             else if (hook.hookedCaterpillar) {
                 const caterpillar = hook.hookedCaterpillar;
@@ -528,10 +606,16 @@ export function drawHook() {
     const endX = startX + Math.cos(hook.angle) * hook.length;
     const endY = startY + Math.sin(hook.angle) * hook.length;
 
-    // Draw aim line when ready
-    if (hook.state === 'ready' && gameState.state === 'playing') {
-        const dx = gameState.mouseX - startX;
+    // Draw aim line when ready (but not when caught by fishing rod)
+    if (hook.state === 'ready' && gameState.state === 'playing' && !hook.hookedByFishingRod) {
+        let dx = gameState.mouseX - startX;
         const dy = gameState.mouseY - startY;
+
+        // When poisoned, reverse X direction to show where tongue will actually go
+        if (frogState.isPoisoned) {
+            dx = -dx;
+        }
+
         const distance = Math.sqrt(dx * dx + dy * dy);
         const aimAngle = Math.atan2(dy, dx);
 

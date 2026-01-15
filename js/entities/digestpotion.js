@@ -80,6 +80,8 @@ export function updateDigestPotion() {
             frogState.doublePointsTimer = 600;
             frogState.flashColor = '#fb923c';
             frogState.flashTimer = frogState.flashDuration;
+            // Reset digestion time bonus back to 0
+            frogState.digestionTimeBonus = 0;
             digestPotion.active = false;
             return;
         }

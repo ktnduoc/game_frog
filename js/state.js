@@ -21,7 +21,10 @@ export const gameState = {
     combo: 0,
     mouseX: CANVAS_WIDTH / 2,
     mouseY: 0,
-    introTimer: 0
+    introTimer: 0,
+    // Game over state
+    gameOverTimer: 0,
+    deathReason: '' // 'poison' | 'starvation' | 'overweight' | ''
 };
 
 // Day/Night cycle state
@@ -111,9 +114,11 @@ export const frogState = {
     poisonTimer: 0,
     poisonDuration: 300, // 5 seconds at 60fps
     isDead: false,
+    // Antidote inventory
+    antidoteCount: 0, // Number of antidotes collected
     // Hunger state
     hungerTimer: 0,
-    hungerDuration: 1800, // 30 seconds at 60fps
+    hungerDuration: 900, // 15 seconds at 60fps
     isStarving: false,
     // Digestion system
     weight: 0,              // Current accumulated weight
@@ -124,6 +129,7 @@ export const frogState = {
     pendingFood: [],        // Queue of food being digested [{points, isFish}]
     digestionSpeed: 1,      // Digestion speed multiplier (2 = 2x faster)
     digestionBoostTimer: 0, // Timer for digestion boost (frames)
+    digestionTimeBonus: 0,  // Bonus reduction in digestion time (frames), stacks when eating insects
     // Double points buff
     doublePointsActive: false, // Whether double points is active
     doublePointsTimer: 0,      // Timer for double points buff (frames)
@@ -154,7 +160,7 @@ export const timers = {
 // Level 0: 0, Level 1: 100, Level 2: 300, Level 3: 600, Level 4: 1000, etc.
 // Each level needs: 100, 200, 300, 400, ... more points than previous
 export function getLevelThreshold(level) {
-    const basePoints = isDevMode() ? 20 : 100; // Dev mode: 20, User mode: 100
+    const basePoints = isDevMode() ? 5 : 100; // Dev mode: 5 (95% reduction), User mode: 100
     return basePoints * level * (level + 1) / 2;
 }
 
@@ -203,7 +209,11 @@ export function eatFood(points, isFish = false) {
 
     // Calculate digestion time
     // Fish takes 10 seconds to digest, insects based on points (max 5 seconds)
-    const digestionTime = isFish ? FISH_DIGESTION_TIME : Math.min(points * 3, MAX_DIGESTION_TIME);
+    // Apply digestionTimeBonus for insects (not fish)
+    let digestionTime = isFish ? FISH_DIGESTION_TIME : Math.min(points * 3, MAX_DIGESTION_TIME);
+    if (!isFish && frogState.digestionTimeBonus > 0) {
+        digestionTime = Math.max(6, digestionTime - frogState.digestionTimeBonus); // Min 0.1s (6 frames)
+    }
 
     // Add to pending food queue
     frogState.pendingFood.push({

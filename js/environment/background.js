@@ -3,7 +3,9 @@ import { ctx } from '../utils/canvas.js';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../config.js';
 import { birds, drawBirds } from './birds.js';
 import { drawClouds, drawSkyDarkness } from './clouds.js';
-import { dayNightState } from '../state.js';
+import { dayNightState, frogState, gameState } from '../state.js';
+import { frog } from '../entities/frog.js';
+import { hook } from '../entities/hook.js';
 
 // Stars for night sky
 const stars = [];
@@ -16,6 +18,62 @@ for (let i = 0; i < 50; i++) {
         twinkleOffset: Math.random() * Math.PI * 2
     });
 }
+
+// Owl state for night time animation
+const owlState = {
+    blinkTimer: 0,
+    isBlinking: false,
+    headTilt: 0,
+    eyeGlow: 0,
+    side: Math.random() > 0.5 ? 'right' : 'left', // Random left or right
+    lastNightBlend: 0 // Track when night starts to randomize position
+};
+
+// Cute ghosts floating above water at night
+const ghosts = [];
+for (let i = 0; i < 4; i++) {
+    ghosts.push({
+        x: 80 + Math.random() * (CANVAS_WIDTH - 160),
+        y: CANVAS_HEIGHT - 80 + Math.random() * 40,
+        size: 18 + Math.random() * 10,
+        speedX: (Math.random() - 0.5) * 0.8,
+        speedY: 0,
+        floatOffset: Math.random() * Math.PI * 2,
+        floatSpeed: 0.02 + Math.random() * 0.015,
+        wobbleOffset: Math.random() * Math.PI * 2,
+        blinkTimer: Math.random() * 200,
+        isBlinking: false,
+        expression: Math.floor(Math.random() * 3) // 0: happy, 1: surprised, 2: sleepy
+    });
+}
+
+// Fishing rod state - trap for frog
+export const fishingRod = {
+    x: -30, // Position from left edge (negative to be closer to edge)
+    y: -100, // Extremely high - way above the well
+    rodEndX: 380, // Rod extends longer to center-right
+    rodEndY: 0, // Very high end position
+    hookY: 200, // Y position of the bait/hook (much higher)
+    hookSwing: 0, // Swinging animation offset
+    swingSpeed: 0.015, // Slower swing
+    swingAmount: 50, // Much wider swing range
+    lineLength: 175, // Longer line
+    isActive: false, // Show fishing rod only from level 15
+    isCaught: false, // Frog caught by fishing rod
+    pullUpSpeed: 2,
+    minHookY: 175, // Stop pulling at this Y (keep frog below well mouth)
+    baitSize: 8, // Smaller bait (reduced from 12 to 8)
+    loweringSpeed: 0.3, // Speed of lowering bait
+    isLowering: false, // Animation state
+    targetHookY: 200, // Target Y position (updated to match hookY)
+    // Bait position for collision detection
+    getBaitX() {
+        return this.rodEndX + Math.sin(this.hookSwing) * this.swingAmount;
+    },
+    getBaitY() {
+        return this.hookY;
+    }
+};
 
 // Bucket state for interaction
 export const bucketState = {
@@ -182,6 +240,9 @@ export function drawBackground() {
 
     // Draw sky darkness overlay when clouds block sun
     drawSkyDarkness();
+
+    // Draw cute ghosts floating at night
+    drawGhosts(nightBlend);
 
     // Flying zone indicator
     ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
@@ -1196,10 +1257,827 @@ export function drawVictoryWalls() {
 
     ctx.restore();
 
+    // Calculate nightBlend for owl
+    let nightBlend = 0;
+    if (dayNightState.phase === 'night' && !dayNightState.isTransitioning) {
+        nightBlend = 1;
+    } else if (dayNightState.phase === 'day' && !dayNightState.isTransitioning) {
+        nightBlend = 0;
+    } else if (dayNightState.isTransitioning) {
+        if (dayNightState.targetPhase === 'night') {
+            nightBlend = dayNightState.transitionProgress;
+        } else {
+            nightBlend = 1 - dayNightState.transitionProgress;
+        }
+    }
+
+    // Draw owl on well edge at night
+    drawOwl(nightBlend);
+
     return finishLineY;
 }
 
 // Get finish line Y position
 export function getFinishLineY() {
     return 150;
+}
+
+// Draw cute owl on well edge at night
+function drawOwl(nightBlend) {
+    if (nightBlend <= 0) return;
+
+    // Randomize owl position when night starts (transition from day to night)
+    if (nightBlend > 0.1 && owlState.lastNightBlend <= 0.1) {
+        owlState.side = Math.random() > 0.5 ? 'right' : 'left';
+    }
+    owlState.lastNightBlend = nightBlend;
+
+    const time = Date.now() * 0.001;
+    const wallWidth = 50;
+    const owlX = owlState.side === 'left' ? 25 : CANVAS_WIDTH - 25; // On left or right wall
+    const owlY = 130; // Just above finish line
+
+    // Update owl animation state
+    owlState.blinkTimer++;
+    if (owlState.blinkTimer > 180 + Math.random() * 120) {
+        owlState.isBlinking = true;
+        owlState.blinkTimer = 0;
+    }
+    if (owlState.isBlinking && owlState.blinkTimer > 8) {
+        owlState.isBlinking = false;
+    }
+
+    // Head tilt animation - cute bobbing
+    owlState.headTilt = Math.sin(time * 0.8) * 0.15;
+
+    // Eye glow animation
+    owlState.eyeGlow = 0.6 + Math.sin(time * 2) * 0.3;
+
+    ctx.save();
+    ctx.globalAlpha = nightBlend; // Fade in with night
+    ctx.translate(owlX, owlY);
+
+    // Body - round and fluffy (soft brown)
+    const bodyGradient = ctx.createRadialGradient(0, 10, 0, 0, 10, 20);
+    bodyGradient.addColorStop(0, '#c4a882');
+    bodyGradient.addColorStop(0.6, '#a08060');
+    bodyGradient.addColorStop(1, '#7a6048');
+    ctx.fillStyle = bodyGradient;
+    ctx.beginPath();
+    ctx.ellipse(0, 10, 18, 20, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Fluffy belly - cream colored
+    ctx.fillStyle = '#f5e6d3';
+    ctx.beginPath();
+    ctx.ellipse(0, 14, 12, 14, 0, 0, Math.PI);
+    ctx.fill();
+
+    // Belly feather pattern (cute scallops)
+    ctx.strokeStyle = '#e8d4be';
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.arc(0, 6 + i * 5, 9 - i, 0.4, Math.PI - 0.4);
+        ctx.stroke();
+    }
+
+    // Small cute wings
+    ctx.fillStyle = '#9a7a5a';
+    // Left wing
+    ctx.beginPath();
+    ctx.ellipse(-15, 8, 5, 12, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    // Right wing
+    ctx.beginPath();
+    ctx.ellipse(15, 8, 5, 12, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Head with tilt animation
+    ctx.save();
+    ctx.rotate(owlState.headTilt);
+
+    // Big round head (cuter proportions)
+    const headGradient = ctx.createRadialGradient(0, -10, 0, 0, -10, 18);
+    headGradient.addColorStop(0, '#d4b896');
+    headGradient.addColorStop(0.7, '#a08060');
+    headGradient.addColorStop(1, '#7a6048');
+    ctx.fillStyle = headGradient;
+    ctx.beginPath();
+    ctx.arc(0, -10, 16, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Small cute ear tufts
+    ctx.fillStyle = '#7a6048';
+    // Left ear
+    ctx.beginPath();
+    ctx.moveTo(-10, -22);
+    ctx.lineTo(-13, -30);
+    ctx.lineTo(-7, -24);
+    ctx.closePath();
+    ctx.fill();
+    // Right ear
+    ctx.beginPath();
+    ctx.moveTo(10, -22);
+    ctx.lineTo(13, -30);
+    ctx.lineTo(7, -24);
+    ctx.closePath();
+    ctx.fill();
+
+    // Ear fluff
+    ctx.fillStyle = '#d4b896';
+    ctx.beginPath();
+    ctx.moveTo(-9, -22);
+    ctx.lineTo(-11, -27);
+    ctx.lineTo(-7, -23);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(9, -22);
+    ctx.lineTo(11, -27);
+    ctx.lineTo(7, -23);
+    ctx.closePath();
+    ctx.fill();
+
+    // Facial disc - heart shaped cream area
+    ctx.fillStyle = '#f5e6d3';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(-16, -4, -14, -16);
+    ctx.quadraticCurveTo(-10, -22, 0, -20);
+    ctx.quadraticCurveTo(10, -22, 14, -16);
+    ctx.quadraticCurveTo(16, -4, 0, 0);
+    ctx.fill();
+
+    // Big cute eyes
+    const eyeSize = owlState.isBlinking ? 2 : 8;
+    const eyeY = -12;
+    const eyeSpacing = 8;
+
+    // Eye glow effect
+    if (!owlState.isBlinking) {
+        ctx.save();
+        ctx.globalAlpha = nightBlend * owlState.eyeGlow * 0.4;
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = '#fcd34d';
+        ctx.fillStyle = '#fcd34d';
+        ctx.beginPath();
+        ctx.arc(-eyeSpacing, eyeY, 10, 0, Math.PI * 2);
+        ctx.arc(eyeSpacing, eyeY, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    // Eye whites/base
+    ctx.fillStyle = '#1a1612';
+    ctx.beginPath();
+    ctx.arc(-eyeSpacing, eyeY, eyeSize + 1, 0, Math.PI * 2);
+    ctx.arc(eyeSpacing, eyeY, eyeSize + 1, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eye color - big golden eyes
+    const eyeGradient = ctx.createRadialGradient(-eyeSpacing, eyeY, 0, -eyeSpacing, eyeY, eyeSize);
+    eyeGradient.addColorStop(0, '#fef3c7');
+    eyeGradient.addColorStop(0.3, '#fcd34d');
+    eyeGradient.addColorStop(0.7, '#f59e0b');
+    eyeGradient.addColorStop(1, '#d97706');
+    ctx.fillStyle = eyeGradient;
+    ctx.beginPath();
+    ctx.arc(-eyeSpacing, eyeY, eyeSize, 0, Math.PI * 2);
+    ctx.fill();
+
+    const eyeGradient2 = ctx.createRadialGradient(eyeSpacing, eyeY, 0, eyeSpacing, eyeY, eyeSize);
+    eyeGradient2.addColorStop(0, '#fef3c7');
+    eyeGradient2.addColorStop(0.3, '#fcd34d');
+    eyeGradient2.addColorStop(0.7, '#f59e0b');
+    eyeGradient2.addColorStop(1, '#d97706');
+    ctx.fillStyle = eyeGradient2;
+    ctx.beginPath();
+    ctx.arc(eyeSpacing, eyeY, eyeSize, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Big cute pupils
+    if (!owlState.isBlinking) {
+        ctx.fillStyle = '#0a0a0a';
+        ctx.beginPath();
+        ctx.arc(-eyeSpacing, eyeY, 3.5, 0, Math.PI * 2);
+        ctx.arc(eyeSpacing, eyeY, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Big sparkly eye shine (2 highlights per eye)
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.beginPath();
+        ctx.arc(-eyeSpacing - 2, eyeY - 2, 2, 0, Math.PI * 2);
+        ctx.arc(eyeSpacing - 2, eyeY - 2, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.beginPath();
+        ctx.arc(-eyeSpacing + 2, eyeY + 2, 1, 0, Math.PI * 2);
+        ctx.arc(eyeSpacing + 2, eyeY + 2, 1, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Rosy cheeks
+    ctx.fillStyle = 'rgba(255, 150, 150, 0.35)';
+    ctx.beginPath();
+    ctx.ellipse(-12, -6, 4, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(12, -6, 4, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Small cute beak
+    ctx.fillStyle = '#f4a460';
+    ctx.beginPath();
+    ctx.moveTo(0, -5);
+    ctx.lineTo(-3, -1);
+    ctx.lineTo(0, 2);
+    ctx.lineTo(3, -1);
+    ctx.closePath();
+    ctx.fill();
+
+    // Beak highlight
+    ctx.fillStyle = '#ffc080';
+    ctx.beginPath();
+    ctx.moveTo(0, -5);
+    ctx.lineTo(-1.5, -2);
+    ctx.lineTo(0, 0);
+    ctx.lineTo(1.5, -2);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore(); // End head rotation
+
+    // Cute small feet
+    ctx.fillStyle = '#f4a460';
+    // Left foot
+    ctx.beginPath();
+    ctx.ellipse(-6, 28, 4, 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Right foot
+    ctx.beginPath();
+    ctx.ellipse(6, 28, 4, 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Tiny toes
+    ctx.strokeStyle = '#e08030';
+    ctx.lineWidth = 1.5;
+    ctx.lineCap = 'round';
+    // Left toes
+    ctx.beginPath();
+    ctx.moveTo(-8, 29);
+    ctx.lineTo(-10, 31);
+    ctx.moveTo(-6, 29);
+    ctx.lineTo(-6, 32);
+    ctx.moveTo(-4, 29);
+    ctx.lineTo(-2, 31);
+    ctx.stroke();
+    // Right toes
+    ctx.beginPath();
+    ctx.moveTo(8, 29);
+    ctx.lineTo(10, 31);
+    ctx.moveTo(6, 29);
+    ctx.lineTo(6, 32);
+    ctx.moveTo(4, 29);
+    ctx.lineTo(2, 31);
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+// Draw cute ghosts floating above water at night
+function drawGhosts(nightBlend) {
+    if (nightBlend <= 0.3) return;
+
+    const time = Date.now() * 0.001;
+    const ghostAlpha = Math.min(1, (nightBlend - 0.3) / 0.7); // Fade in after 30% night
+
+    for (const ghost of ghosts) {
+        // Update ghost position
+        ghost.x += ghost.speedX;
+        ghost.floatOffset += ghost.floatSpeed;
+        ghost.wobbleOffset += 0.03;
+
+        // Float up and down
+        const floatY = Math.sin(ghost.floatOffset) * 12;
+        const wobble = Math.sin(ghost.wobbleOffset) * 0.1;
+
+        // Bounce off edges
+        if (ghost.x < 60 || ghost.x > CANVAS_WIDTH - 60) {
+            ghost.speedX *= -1;
+        }
+
+        // Blinking
+        ghost.blinkTimer++;
+        if (ghost.blinkTimer > 180 + Math.random() * 100) {
+            ghost.isBlinking = true;
+            ghost.blinkTimer = 0;
+        }
+        if (ghost.isBlinking && ghost.blinkTimer > 10) {
+            ghost.isBlinking = false;
+        }
+
+        ctx.save();
+        ctx.globalAlpha = ghostAlpha * 0.4;
+        ctx.translate(ghost.x, ghost.y + floatY);
+        ctx.rotate(wobble);
+
+        const size = ghost.size;
+
+        // Ghost glow
+        ctx.save();
+        ctx.globalAlpha = ghostAlpha * 0.15;
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = 'rgba(200, 220, 255, 0.8)';
+        ctx.fillStyle = 'rgba(200, 220, 255, 0.3)';
+        ctx.beginPath();
+        ctx.arc(0, 0, size + 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // Ghost body - soft white/blue gradient
+        const bodyGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, size * 1.5);
+        bodyGradient.addColorStop(0, 'rgba(255, 255, 255, 0.5)');
+        bodyGradient.addColorStop(0.5, 'rgba(230, 240, 255, 0.4)');
+        bodyGradient.addColorStop(1, 'rgba(200, 220, 250, 0.3)');
+        ctx.fillStyle = bodyGradient;
+
+        // Main body shape (rounded top, wavy bottom)
+        ctx.beginPath();
+        ctx.arc(0, -size * 0.2, size, Math.PI, 0);
+
+        // Wavy bottom tail
+        const waveTime = time * 3 + ghost.floatOffset;
+        ctx.lineTo(size, size * 0.3);
+        ctx.quadraticCurveTo(size * 0.7, size * 0.8 + Math.sin(waveTime) * 4, size * 0.5, size * 0.5);
+        ctx.quadraticCurveTo(size * 0.3, size * 0.9 + Math.sin(waveTime + 1) * 4, 0, size * 0.6);
+        ctx.quadraticCurveTo(-size * 0.3, size * 0.9 + Math.sin(waveTime + 2) * 4, -size * 0.5, size * 0.5);
+        ctx.quadraticCurveTo(-size * 0.7, size * 0.8 + Math.sin(waveTime + 3) * 4, -size, size * 0.3);
+        ctx.closePath();
+        ctx.fill();
+
+        // Rosy cheeks
+        ctx.fillStyle = 'rgba(255, 180, 200, 0.4)';
+        ctx.beginPath();
+        ctx.ellipse(-size * 0.5, size * 0.1, size * 0.2, size * 0.15, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(size * 0.5, size * 0.1, size * 0.2, size * 0.15, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Eyes based on expression
+        const eyeY = -size * 0.15;
+        const eyeSpacing = size * 0.3;
+
+        if (ghost.isBlinking) {
+            // Closed eyes - happy line
+            ctx.strokeStyle = '#4a5568';
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.arc(-eyeSpacing, eyeY, size * 0.12, 0.2, Math.PI - 0.2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(eyeSpacing, eyeY, size * 0.12, 0.2, Math.PI - 0.2);
+            ctx.stroke();
+        } else {
+            if (ghost.expression === 0) {
+                // Happy eyes - dots
+                ctx.fillStyle = '#2d3748';
+                ctx.beginPath();
+                ctx.arc(-eyeSpacing, eyeY, size * 0.1, 0, Math.PI * 2);
+                ctx.arc(eyeSpacing, eyeY, size * 0.1, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Eye shine
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx.beginPath();
+                ctx.arc(-eyeSpacing - 2, eyeY - 2, size * 0.04, 0, Math.PI * 2);
+                ctx.arc(eyeSpacing - 2, eyeY - 2, size * 0.04, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (ghost.expression === 1) {
+                // Surprised eyes - big round
+                ctx.fillStyle = '#2d3748';
+                ctx.beginPath();
+                ctx.arc(-eyeSpacing, eyeY, size * 0.14, 0, Math.PI * 2);
+                ctx.arc(eyeSpacing, eyeY, size * 0.14, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx.beginPath();
+                ctx.arc(-eyeSpacing - 2, eyeY - 3, size * 0.06, 0, Math.PI * 2);
+                ctx.arc(eyeSpacing - 2, eyeY - 3, size * 0.06, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Small "o" mouth
+                ctx.fillStyle = '#4a5568';
+                ctx.beginPath();
+                ctx.ellipse(0, size * 0.2, size * 0.08, size * 0.1, 0, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                // Sleepy eyes - half closed
+                ctx.fillStyle = '#2d3748';
+                ctx.beginPath();
+                ctx.ellipse(-eyeSpacing, eyeY, size * 0.12, size * 0.06, 0, 0, Math.PI * 2);
+                ctx.ellipse(eyeSpacing, eyeY, size * 0.12, size * 0.06, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // ZZZ effect
+                ctx.fillStyle = 'rgba(100, 150, 200, 0.6)';
+                ctx.font = `${size * 0.3}px Arial`;
+                ctx.fillText('z', size * 0.6, -size * 0.4);
+                ctx.font = `${size * 0.25}px Arial`;
+                ctx.fillText('z', size * 0.8, -size * 0.6);
+            }
+        }
+
+        // Cute smile for happy ghost (when not blinking)
+        if (!ghost.isBlinking && ghost.expression === 0) {
+            ctx.strokeStyle = '#4a5568';
+            ctx.lineWidth = 1.5;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.arc(0, size * 0.15, size * 0.15, 0.3, Math.PI - 0.3);
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    }
+}
+
+// Draw fishing rod with bait dangling from well edge
+export function drawFishingRod() {
+    // Only show fishing rod from level 15 onwards
+    if (frogState.level < 15) {
+        fishingRod.isActive = false;
+        return;
+    }
+    
+    fishingRod.isActive = true;
+    
+    if (!fishingRod.isActive) return;
+
+    const time = Date.now() * 0.001;
+    
+    // Update swing animation
+    fishingRod.hookSwing += fishingRod.swingSpeed;
+    
+    // Lowering animation
+    if (fishingRod.isLowering && fishingRod.hookY < fishingRod.targetHookY) {
+        fishingRod.hookY += fishingRod.loweringSpeed;
+    }
+    
+    // If frog is caught, pull up (stop at minimum height to keep frog below well mouth)
+    if (fishingRod.isCaught) {
+        // Increment caught timer
+        if (hook.hookedByFishingRod) {
+            hook.caughtTimer++;
+            
+            // After 3 seconds (180 frames at 60fps), check for antidote rescue
+            if (hook.caughtTimer >= 180) {
+                if (frogState.antidoteCount >= 3) {
+                    // Use 3 antidotes to escape
+                    frogState.antidoteCount -= 3;
+                    
+                    // Update UI
+                    const antidoteElement = document.getElementById('antidote-count');
+                    if (antidoteElement) {
+                        antidoteElement.textContent = frogState.antidoteCount;
+                    }
+                    
+                    // Create massive escape effect with purple particles
+                    if (!frog.antidoteParticles) frog.antidoteParticles = [];
+                    for (let i = 0; i < 50; i++) {
+                        const angle = (Math.PI * 2 * i) / 50;
+                        const speed = 4 + Math.random() * 4;
+                        frog.antidoteParticles.push({
+                            x: frog.x,
+                            y: frog.y,
+                            vx: Math.cos(angle) * speed,
+                            vy: Math.sin(angle) * speed - 3,
+                            life: 1.0,
+                            size: 5 + Math.random() * 6,
+                            hue: 270 + Math.random() * 30 // Purple
+                        });
+                    }
+                    
+                    // Flash effect
+                    frogState.flashColor = '#a855f7';
+                    frogState.flashTimer = frogState.flashDuration * 3; // Long flash
+                    
+                    // Play sound
+                    import('../audio/audio.js').then(module => {
+                        module.playHolyWaterSound();
+                    });
+                    
+                    // Release the frog!
+                    hook.hookedByFishingRod = false;
+                    fishingRod.isCaught = false;
+                    hook.caughtTimer = 0;
+                    gameState.deathReason = '';
+                    
+                    // Reset fishing rod
+                    fishingRod.hookY = 200;
+                    fishingRod.isLowering = false;
+                }
+                // If not enough antidotes, frog stays caught (will eventually game over)
+            }
+        }
+        
+        if (fishingRod.hookY > fishingRod.minHookY) {
+            fishingRod.hookY -= fishingRod.pullUpSpeed;
+            fishingRod.lineLength = fishingRod.hookY - fishingRod.y;
+        } else {
+            fishingRod.hookY = fishingRod.minHookY; // Lock at minimum height
+        }
+    }
+    
+    // Calculate bait position with swing (or frog position if caught)
+    let baitX = fishingRod.getBaitX();
+    let baitY = fishingRod.getBaitY();
+    
+    // If frog is caught, use frog's actual position for line drawing
+    if (fishingRod.isCaught) {
+        baitX = frog.x;
+        baitY = frog.y - 20; // Connect to frog's mouth area
+    }
+    
+    ctx.save();
+    
+    // Bamboo fishing rod - curved like in image (màu xanh lá)
+    const rodStartX = fishingRod.x;
+    const rodStartY = fishingRod.y;
+    const rodEndX = fishingRod.rodEndX;
+    const rodEndY = fishingRod.rodEndY;
+    
+    // Draw curved bamboo rod with tapering (thick to thin)
+    const segments = 50; // More segments for smooth tapering
+    const maxWidth = 14; // Thick at base
+    const minWidth = 4;  // Thin at tip
+    
+    // Calculate control points for bezier curve
+    const controlX1 = rodStartX + (rodEndX - rodStartX) * 0.3;
+    const controlY1 = rodStartY - 30;
+    const controlX2 = rodStartX + (rodEndX - rodStartX) * 0.7;
+    const controlY2 = rodStartY + 10;
+    
+    // Draw rod with gradually decreasing width
+    for (let i = 0; i < segments; i++) {
+        const t1 = i / segments;
+        const t2 = (i + 1) / segments;
+        
+        // Calculate positions on bezier curve
+        const mt1 = 1 - t1;
+        const mt1_2 = mt1 * mt1;
+        const mt1_3 = mt1_2 * mt1;
+        const t1_2 = t1 * t1;
+        const t1_3 = t1_2 * t1;
+        
+        const x1 = mt1_3 * rodStartX + 3 * mt1_2 * t1 * controlX1 + 3 * mt1 * t1_2 * controlX2 + t1_3 * rodEndX;
+        const y1 = mt1_3 * rodStartY + 3 * mt1_2 * t1 * controlY1 + 3 * mt1 * t1_2 * controlY2 + t1_3 * rodEndY;
+        
+        const mt2 = 1 - t2;
+        const mt2_2 = mt2 * mt2;
+        const mt2_3 = mt2_2 * mt2;
+        const t2_2 = t2 * t2;
+        const t2_3 = t2_2 * t2;
+        
+        const x2 = mt2_3 * rodStartX + 3 * mt2_2 * t2 * controlX1 + 3 * mt2 * t2_2 * controlX2 + t2_3 * rodEndX;
+        const y2 = mt2_3 * rodStartY + 3 * mt2_2 * t2 * controlY1 + 3 * mt2 * t2_2 * controlY2 + t2_3 * rodEndY;
+        
+        // Width decreases from base to tip
+        const width = maxWidth - (maxWidth - minWidth) * t1;
+        
+        // Main rod color
+        ctx.strokeStyle = '#22c55e';
+        ctx.lineWidth = width;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        
+        // Darker inner line for depth
+        if (i % 2 === 0) {
+            ctx.strokeStyle = '#16a34a';
+            ctx.lineWidth = width * 0.6;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+        }
+    }
+    
+    // Bamboo segments/nodes (mấu tre) - more nodes for longer rod
+    ctx.fillStyle = '#15803d';
+    const nodePositions = [0.15, 0.3, 0.45, 0.6, 0.75, 0.9];
+    nodePositions.forEach(t => {
+        // Calculate position on bezier curve
+        const mt = 1 - t;
+        const mt2 = mt * mt;
+        const mt3 = mt2 * mt;
+        const t2 = t * t;
+        const t3 = t2 * t;
+        
+        const nodeX = mt3 * rodStartX + 3 * mt2 * t * controlX1 + 3 * mt * t2 * controlX2 + t3 * rodEndX;
+        const nodeY = mt3 * rodStartY + 3 * mt2 * t * controlY1 + 3 * mt * t2 * controlY2 + t3 * rodEndY;
+        
+        // Node size decreases with rod thickness
+        const nodeWidth = maxWidth - (maxWidth - minWidth) * t;
+        const nodeSize = nodeWidth * 0.5;
+        
+        // Draw node ring
+        ctx.beginPath();
+        ctx.arc(nodeX, nodeY, nodeSize + 1, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Node outline
+        ctx.strokeStyle = '#14532d';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    });
+    
+    // Highlight on bamboo for shine effect
+    ctx.strokeStyle = 'rgba(134, 239, 172, 0.5)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(rodStartX + 2, rodStartY);
+    ctx.bezierCurveTo(controlX1, controlY1 - 2, controlX2, controlY2 - 2, rodEndX - 5, rodEndY);
+    ctx.stroke();
+    
+    // Fishing line (thin nylon string) - from end of rod
+    ctx.strokeStyle = 'rgba(220, 220, 255, 0.7)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(rodEndX, rodEndY);
+    
+    // Draw curved line (catenary curve effect)
+    const lineSegments = 30;
+    for (let i = 1; i <= lineSegments; i++) {
+        const t = i / lineSegments;
+        const lineX = rodEndX + (baitX - rodEndX) * t;
+        const sag = Math.sin(t * Math.PI) * 15; // More pronounced sag
+        const lineY = rodEndY + (baitY - rodEndY) * t + sag;
+        ctx.lineTo(lineX, lineY);
+    }
+    ctx.stroke();
+    
+    // Line shimmer effect
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(rodEndX, rodEndY);
+    for (let i = 1; i <= lineSegments; i++) {
+        const t = i / lineSegments;
+        const lineX = rodEndX + (baitX - rodEndX) * t;
+        const sag = Math.sin(t * Math.PI) * 15;
+        const lineY = rodEndY + (baitY - rodEndY) * t + sag;
+        if (i % 3 === 0) ctx.lineTo(lineX, lineY);
+    }
+    ctx.stroke();
+    
+    // Don't draw bait if frog has caught it
+    if (!fishingRod.isCaught) {
+    // Fake bait (looks like juicy insect)
+    const baitSize = fishingRod.baitSize;
+    const wobble = Math.sin(time * 3) * 0.1; // Slight rotation
+    
+    ctx.save();
+    ctx.translate(baitX, baitY);
+    ctx.rotate(wobble);
+    
+    // Bait glow (make it look tempting)
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = 'rgba(251, 191, 36, 0.6)';
+    
+    // Fake wings (larger, more visible)
+    const wingFlap = Math.sin(time * 8) * 0.2;
+    ctx.fillStyle = 'rgba(200, 230, 255, 0.6)';
+    ctx.strokeStyle = 'rgba(150, 180, 220, 0.8)';
+    ctx.lineWidth = 1;
+    
+    // Left wing
+    ctx.beginPath();
+    ctx.ellipse(-baitSize * 0.9, -baitSize * 0.4, baitSize * 0.7, baitSize * 1.5, -0.4 - wingFlap, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    
+    // Right wing
+    ctx.beginPath();
+    ctx.ellipse(baitSize * 0.9, -baitSize * 0.4, baitSize * 0.7, baitSize * 1.5, 0.4 + wingFlap, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    
+    // Wing veins
+    ctx.strokeStyle = 'rgba(100, 130, 180, 0.4)';
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(-baitSize * 0.9, -baitSize * 0.4);
+        ctx.lineTo(-baitSize * 1.3, -baitSize * 0.4 + i * baitSize * 0.4);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(baitSize * 0.9, -baitSize * 0.4);
+        ctx.lineTo(baitSize * 1.3, -baitSize * 0.4 + i * baitSize * 0.4);
+        ctx.stroke();
+    }
+    
+    ctx.shadowBlur = 0;
+    
+    // Bait body (plump and juicy looking)
+    const bodyGradient = ctx.createRadialGradient(-2, -2, 0, 0, 0, baitSize * 1.2);
+    bodyGradient.addColorStop(0, '#fef3c7');
+    bodyGradient.addColorStop(0.3, '#fbbf24');
+    bodyGradient.addColorStop(0.7, '#f59e0b');
+    bodyGradient.addColorStop(1, '#d97706');
+    ctx.fillStyle = bodyGradient;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, baitSize, baitSize * 1.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Body segments (like a grub)
+    ctx.strokeStyle = 'rgba(217, 119, 6, 0.4)';
+    ctx.lineWidth = 1.5;
+    for (let i = 1; i < 4; i++) {
+        const segY = -baitSize * 0.8 + i * (baitSize * 1.6 / 4);
+        ctx.beginPath();
+        ctx.ellipse(0, segY, baitSize * 0.9, 2, 0, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+    
+    // Bait shine (glossy, appetizing)
+    ctx.fillStyle = 'rgba(255, 255, 230, 0.8)';
+    ctx.beginPath();
+    ctx.ellipse(-baitSize * 0.3, -baitSize * 0.5, baitSize * 0.4, baitSize * 0.6, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Small highlight spots
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.beginPath();
+    ctx.arc(-baitSize * 0.4, -baitSize * 0.6, baitSize * 0.15, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Fake legs
+    ctx.strokeStyle = '#8b6914';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    const legPositions = [-0.5, 0, 0.5];
+    legPositions.forEach((pos, i) => {
+        const legY = pos * baitSize;
+        const legAngle = Math.sin(time * 5 + i) * 0.3;
+        // Left leg
+        ctx.beginPath();
+        ctx.moveTo(-baitSize * 0.7, legY);
+        ctx.lineTo(-baitSize * 1.2, legY + baitSize * 0.3 + Math.sin(time * 6 + i) * 3);
+        ctx.stroke();
+        // Right leg
+        ctx.beginPath();
+        ctx.moveTo(baitSize * 0.7, legY);
+        ctx.lineTo(baitSize * 1.2, legY + baitSize * 0.3 + Math.sin(time * 6 + i + 1) * 3);
+        ctx.stroke();
+    });
+    
+    // Fake antenna (more prominent)
+    ctx.strokeStyle = '#b8956a';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    const antennaWave = Math.sin(time * 4) * 0.2;
+    ctx.beginPath();
+    ctx.moveTo(-baitSize * 0.3, -baitSize * 1.2);
+    ctx.quadraticCurveTo(-baitSize * 0.5, -baitSize * 1.8, -baitSize * 0.4 - antennaWave * baitSize, -baitSize * 2.2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(baitSize * 0.3, -baitSize * 1.2);
+    ctx.quadraticCurveTo(baitSize * 0.5, -baitSize * 1.8, baitSize * 0.4 + antennaWave * baitSize, -baitSize * 2.2);
+    ctx.stroke();
+    
+    // Antenna tips (bright)
+    ctx.fillStyle = '#fbbf24';
+    ctx.beginPath();
+    ctx.arc(-baitSize * 0.4 - antennaWave * baitSize, -baitSize * 2.2, 2.5, 0, Math.PI * 2);
+    ctx.arc(baitSize * 0.4 + antennaWave * baitSize, -baitSize * 2.2, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Hook (metal, partially visible)
+    ctx.strokeStyle = '#71717a';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(0, baitSize * 0.8);
+    ctx.lineTo(0, baitSize * 1.4);
+    ctx.arc(baitSize * 0.4, baitSize * 1.6, 4, Math.PI, 0, true);
+    ctx.stroke();
+    
+    // Hook shine
+    ctx.strokeStyle = '#d4d4d8';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-1, baitSize * 0.9);
+    ctx.lineTo(-1, baitSize * 1.3);
+    ctx.stroke();
+    
+    ctx.restore();
+    } // End of bait drawing (hidden when caught)
+    
+    ctx.restore();
 }

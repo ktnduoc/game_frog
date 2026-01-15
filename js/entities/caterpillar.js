@@ -108,13 +108,16 @@ export function updateCaterpillars() {
     if (gameState.state !== 'playing') return;
     if (!frogLilyPadRef) return;
 
-    // Spawn timer
-    caterpillarSpawnTimer++;
-    if (caterpillarSpawnTimer >= CATERPILLAR_SPAWN_INTERVAL) {
-        caterpillarSpawnTimer = 0;
-        // Max 2 caterpillars at a time
-        if (caterpillars.length < 2) {
-            spawnCaterpillar();
+    // Spawn timer - only spawn caterpillars up to level 15
+    const currentLevel = frogStateRef ? frogStateRef.level : 1;
+    if (currentLevel <= 15) {
+        caterpillarSpawnTimer++;
+        if (caterpillarSpawnTimer >= CATERPILLAR_SPAWN_INTERVAL) {
+            caterpillarSpawnTimer = 0;
+            // Max 2 caterpillars at a time
+            if (caterpillars.length < 2) {
+                spawnCaterpillar();
+            }
         }
     }
 
